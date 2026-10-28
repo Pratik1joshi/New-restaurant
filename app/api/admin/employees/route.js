@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import Database from '@/lib/db/index';
 import bcrypt from 'bcryptjs';
-import { getPrimaryAdminId } from '@/lib/employees.js';
+import { assertPayrollAllowsEmployeeDeletion, getPrimaryAdminId } from '@/lib/employees.js';
 import { ensurePayrollSchema } from '@/lib/payroll.js';
 import { ensureHrmSchema } from '@/lib/hrm.js';
-import { requireAuth } from '@/lib/api-guard.js';
+import { salaryValue, saveSalaryTerm, payrollMonth } from '@/lib/payroll-months.js';
+import { requireAuth, handleRouteError } from '@/lib/api-guard.js';
 
 export async function GET(request) {
   try {
@@ -18,7 +19,7 @@ export async function GET(request) {
 
     const employees = await db.all(`
       SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone, u.is_active, u.created_at,
-             u.salary, u.hire_date, u.position, u.department_id, u.designation_id,
+             u.salary, u.absence_daily_rate, u.hire_date, u.position, u.department_id, u.designation_id,
              dep.name AS department_name, des.name AS designation_name
       FROM users u
       LEFT JOIN departments dep ON dep.id = u.department_id
@@ -66,83 +67,21 @@ export async function POST(request) {
       );
     }
 
-    // Hash the PIN using bcrypt
-    const hashedPassword = bcrypt.hashSync(data.pin, 10);
+    if (!data.username || !String(data.full_name || '').trim()) return NextResponse.json({ error: 'Enter the staff name and username.' }, { status: 400 });
+    if (!/^[0-9]{4}$/.test(String(data.pin || ''))) return NextResponse.json({ error: 'Enter a four digit PIN.' }, { status: 400 });
+    if (!['admin', 'cashier', 'waiter', 'kitchen'].includes(data.role)) return NextResponse.json({ error: 'Choose a valid staff role.' }, { status: 400 });
+    const salary = salaryValue(data.salary);
+    const dailyRate = salaryValue(data.absence_daily_rate, 'Daily absence deduction') ?? 0;
+    const effectiveMonth = payrollMonth(data.salary_effective_month || undefined);
+    if (effectiveMonth < payrollMonth()) return NextResponse.json({ error: 'Salary must start this month or a future month.' }, { status: 400 });
+    const hashedPassword = bcrypt.hashSync(String(data.pin), 10);
+    const employee = await db.transaction(async (tx) => {
 
-    const result = await db.run(`
-      INSERT INTO users (
-        username, full_name, role, password_hash, email, phone, is_active,
-        salary, hire_date, position, department_id, designation_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      data.username,
-      data.full_name,
-      data.role,
-      hashedPassword,
-      data.email || null,
-      data.phone || null,
-      data.is_active ? 1 : 0,
-      data.salary === '' || data.salary == null ? null : Number(data.salary),
-      data.hire_date || null,
-      data.position || null,
-      data.department_id ? Number(data.department_id) : null,
-      data.designation_id ? Number(data.designation_id) : null,
-    ]);
-
-    const employee = await db.get(`
-      SELECT id, username, full_name, role, email, phone, is_active, created_at,
-             salary, hire_date, position, department_id, designation_id
-      FROM users WHERE id = ?
-    `, [result.lastInsertRowid]);
-
-    return NextResponse.json({ 
-      message: 'Employee created successfully',
-      employee 
-    }, { status: 201 });
-  } catch (error) {
-    console.error('Create employee error:', error);
-    return NextResponse.json(
-      { error: 'Failed to create employee' },
-      { status: 500 }
-    );
-  }
-}
-
-export async function PUT(request) {
-  try {
-    const auth = await requireAuth(request, { roles: ['admin', 'cashier'], permission: 'employees.manage' });
-    if (auth.error) return auth.error;
-
-    const data = await request.json();
-    const db = Database.getInstance();
-    await ensurePayrollSchema(db);
-    await ensureHrmSchema(db);
-    const target = await db.get('SELECT role FROM users WHERE id = ?', [data.id]);
-    if (auth.user.role !== 'admin' && (target?.role === 'admin' || data.role === 'admin')) {
-      return NextResponse.json({ error: 'Only an administrator can change an administrator account.' }, { status: 403 });
-    }
-
-    // Check if username is taken by another user
-    const existing = await db.get('SELECT id FROM users WHERE username = ? AND id != ?', [data.username, data.id]);
-    if (existing) {
-      return NextResponse.json(
-        { error: 'Username already exists' },
-        { status: 400 }
-      );
-    }
-
-    const salary = data.salary === '' || data.salary == null ? null : Number(data.salary);
-
-    // Update with or without PIN
-    if (data.pin) {
-      // Hash the new PIN using bcrypt
-      const hashedPassword = bcrypt.hashSync(data.pin, 10);
-
-      await db.run(`
-        UPDATE users
-        SET username = ?, full_name = ?, role = ?, password_hash = ?,
-            email = ?, phone = ?, is_active = ?, salary = ?, hire_date = ?, position = ?
-        WHERE id = ?
+      const result = await tx.run(`
+        INSERT INTO users (
+          username, full_name, role, password_hash, email, phone, is_active,
+          salary, hire_date, position, department_id, designation_id, absence_daily_rate
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         data.username,
         data.full_name,
@@ -150,49 +89,37 @@ export async function PUT(request) {
         hashedPassword,
         data.email || null,
         data.phone || null,
-        data.is_active ? 1 : 0,
+        data.is_active === false ? 0 : 1,
         salary,
         data.hire_date || null,
         data.position || null,
-        data.id
+        data.department_id ? Number(data.department_id) : null,
+        data.designation_id ? Number(data.designation_id) : null,
+        dailyRate,
       ]);
-    } else {
-      await db.run(`
-        UPDATE users
-        SET username = ?, full_name = ?, role = ?,
-            email = ?, phone = ?, is_active = ?, salary = ?, hire_date = ?, position = ?
-        WHERE id = ?
-      `, [
-        data.username,
-        data.full_name,
-        data.role,
-        data.email || null,
-        data.phone || null,
-        data.is_active ? 1 : 0,
-        salary,
-        data.hire_date || null,
-        data.position || null,
-        data.id
-      ]);
-    }
 
-    const employee = await db.get(`
-      SELECT id, username, full_name, role, email, phone, is_active, created_at,
-             salary, hire_date, position
-      FROM users WHERE id = ?
-    `, [data.id]);
+      if (salary != null) await saveSalaryTerm(tx, result.lastInsertRowid, salary, effectiveMonth, auth.user.id);
+      return tx.get(`
+        SELECT id, username, full_name, role, email, phone, is_active, created_at,
+               salary, absence_daily_rate, hire_date, position, department_id, designation_id
+        FROM users WHERE id = ?
+      `, [result.lastInsertRowid]);
+    });
 
     return NextResponse.json({ 
-      message: 'Employee updated successfully',
+      message: 'Employee created successfully',
       employee 
-    });
+    }, { status: 201 });
   } catch (error) {
-    console.error('Update employee error:', error);
-    return NextResponse.json(
-      { error: 'Failed to update employee' },
-      { status: 500 }
-    );
+    return handleRouteError(error, 'Failed to create employee');
   }
+}
+
+export async function PUT(request) {
+  const data = await request.clone().json();
+  if (!data.id) return NextResponse.json({ error: 'Employee ID is required.' }, { status: 400 });
+  const { PUT: updateEmployee } = await import('./[id]/route.js');
+  return updateEmployee(request, { params: Promise.resolve({ id: data.id }) });
 }
 
 export async function DELETE(request) {
@@ -208,6 +135,7 @@ export async function DELETE(request) {
 
     // Prefer /api/admin/employees/[id] — keep this for compatibility
     const db = Database.getInstance();
+    await ensurePayrollSchema(db);
     const { isPrimaryAdmin } = await import('@/lib/employees.js');
     const userId = Number(id);
 
@@ -228,7 +156,8 @@ export async function DELETE(request) {
       );
     }
 
-    await db.transaction(async () => {
+    await db.transaction(async (tx) => {
+      await assertPayrollAllowsEmployeeDeletion(tx, userId);
       try { await db.run('DELETE FROM sessions WHERE user_id = ?', [userId]); } catch { /* optional */ }
       try { await db.run('DELETE FROM devices WHERE user_id = ?', [userId]); } catch { /* optional */ }
       try { await db.run('UPDATE tables SET waiter_id = NULL WHERE waiter_id = ?', [userId]); } catch { /* optional */ }
@@ -241,6 +170,7 @@ export async function DELETE(request) {
       message: 'Employee deleted successfully.',
     });
   } catch (error) {
+    if (error.code === 'employee_payroll_in_use') return handleRouteError(error);
     console.error('Delete employee error:', error);
     const msg = String(error?.message || '');
     if (/FOREIGN KEY|foreign key/i.test(msg)) {

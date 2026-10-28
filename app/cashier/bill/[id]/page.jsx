@@ -14,6 +14,7 @@ import CustomerModePicker, {
 } from '@/components/billing/customer-mode-picker';
 import BillConfirmModal from '@/components/billing/bill-confirm-modal';
 import QrEnlargeModal from '@/components/billing/qr-enlarge-modal';
+import PaymentRemarkField from '@/components/billing/payment-remark-field';
 import { usePaymentQr } from '@/lib/payment-qr.js';
 import { calculateBillTotals, parseSettingsRates, resolveServiceCharge } from '@/lib/billing-totals';
 import ServiceChargeField, { emptyServiceCharge, serviceChargePayload } from '@/components/billing/service-charge-field';
@@ -48,6 +49,7 @@ export default function BillDetailsPage({ params }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pendingBill, setPendingBill] = useState(null);
   const [splitPaymentMode, setSplitPaymentMode] = useState(false);
+  const [paymentRemark, setPaymentRemark] = useState('');
   const [splitPayments, setSplitPayments] = useState([
     { method: 'cash', amount: 0 }
   ]);
@@ -199,11 +201,12 @@ export default function BillDetailsPage({ params }) {
   const normalizeMethod = (m) => ['card', 'bank', 'bank_transfer', 'qr', 'fonepay', 'esewa', 'khalti'].includes(String(m).toLowerCase()) ? 'online' : m;
 
   const buildAllocations = (finalAmount) => {
+    const notes = paymentRemark.trim() || undefined;
     if (splitPaymentMode) {
-      return splitPayments.map((sp) => ({ method: normalizeMethod(sp.method), amount: sp.amount }));
+      return splitPayments.map((sp) => ({ method: normalizeMethod(sp.method), amount: sp.amount, notes }));
     }
     const method = normalizeMethod(paymentMethod);
-    return [{ method, amount: finalAmount, cash_tendered: method === 'cash' ? finalAmount : undefined }];
+    return [{ method, amount: finalAmount, cash_tendered: method === 'cash' ? finalAmount : undefined, notes }];
   };
 
   const openPaymentConfirm = () => {
@@ -676,6 +679,8 @@ export default function BillDetailsPage({ params }) {
                   </div>
                 </div>
               )}
+
+              <PaymentRemarkField className="mb-6" value={paymentRemark} onChange={setPaymentRemark} />
 
               {/* Customer: Walk-in or saved */}
               <div className="mb-6 p-4 bg-stone-50 rounded-lg border-2 border-stone-200">

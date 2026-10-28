@@ -6,9 +6,10 @@ import { getOrderWorkspace, logPosEvent, ensureKotProSchema } from '@/lib/kot-se
 import { createComboSnapshot } from '@/lib/combos.js';
 import { ensureMenuVariantsSchema } from '@/lib/menu-variants.js';
 import { resolvePosItemInput } from '@/lib/pos-item-input.js';
+import { inventoryOperation } from '@/lib/inventory-operations.js';
 
 async function loadOpenOrder(db, orderId) {
-  const order = await db.get('SELECT * FROM orders WHERE id = ?', [orderId]);
+  const order = await db.get(`SELECT * FROM orders WHERE id = ?${db.driver === 'postgres' ? ' FOR UPDATE' : ''}`, [orderId]);
   if (!order) throw Object.assign(new Error('Order not found.'), { status: 404 });
   if (['completed', 'cancelled'].includes(String(order.status || ''))) {
     throw Object.assign(new Error('This order can no longer be edited.'), { status: 409 });
@@ -47,6 +48,8 @@ export async function POST(request, context) {
     const orderId = parseInt(id, 10);
     const body = await request.json();
     const incoming = Array.isArray(body.items) ? body.items : [];
+    const retryKey = String(body.idempotency_key || request.headers.get('Idempotency-Key') || '').trim();
+    if (retryKey.length > 128) return NextResponse.json({ error: 'Invalid item retry key.' }, { status: 400 });
     if (!incoming.length) return NextResponse.json({ error: 'Add at least one item.' }, { status: 400 });
 
     const db = Database.getInstance();
@@ -54,8 +57,9 @@ export async function POST(request, context) {
     await ensureStockSchema(db);
     await ensureMenuVariantsSchema(db);
 
-    const resolved = [];
+    let resolved = [];
     const result = await db.transaction(async (tx) => {
+      return inventoryOperation(tx, incoming, { orderId, operationKey: retryKey ? `pos-add:${orderId}:${retryKey}` : null }, 'deduct', async () => {
       await loadOpenOrder(tx, orderId);
       for (const raw of incoming) {
         const menuId = raw.menu_item_id ? parseInt(raw.menu_item_id, 10) : null;
@@ -103,11 +107,12 @@ export async function POST(request, context) {
         await markOrderStockConsumed(tx, orderId);
       }
       await tx.run('UPDATE orders SET updated_at = CURRENT_TIMESTAMP WHERE id = ?', [orderId]);
-      return true;
+      return { resolved };
+      });
     });
-    void result;
+    resolved = result.resolved;
 
-    await logPosEvent(db, {
+    if (!result.replayed) await logPosEvent(db, {
       action: 'item_added', actor_id: auth.user.id, actor_name: auth.user.full_name,
       order_id: orderId, detail: resolved,
     });

@@ -10,6 +10,7 @@ This directory is the documentation hub for the Raithane Daure Chulo restaurant 
 | [TRD](TRD.md) | Architecture, runtime, modules, and engineering constraints |
 | [App flow](APP_FLOW.md) | Customer, administrator, order, and payment journeys |
 | [Business logic](BUSINESS_LOGIC.md) | Domain rules and important invariants |
+| [Purchase & consumption analytics](purchase-consumption-analytics.md) | Integrated reports, recipe snapshots, permissions, validation, limitations and safe cPanel rollout |
 | [API documentation](API_DOCUMENTATION.md) | API conventions and endpoint catalog |
 | [Database schema](DATABASE_SCHEMA.md) | Data model, table groups, and migration workflow |
 | [Security](SECURITY.md) | Authentication, authorization, secrets, and hardening |

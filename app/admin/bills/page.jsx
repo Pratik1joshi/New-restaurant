@@ -660,6 +660,11 @@ function BillDetailPanel({ id, onClose, onChanged }) {
                 </div>
               )) : <p className="text-sm text-gray-400">No payments recorded.</p>}
             </Section>
+            {bill.remarks?.length ? (
+              <Section title="Remark">
+                {bill.remarks.map((remark) => <p key={remark} className="py-1 text-sm text-gray-700 whitespace-pre-line">{remark}</p>)}
+              </Section>
+            ) : null}
 
             {/* Revisions */}
             {bill.revisions.length > 0 && (

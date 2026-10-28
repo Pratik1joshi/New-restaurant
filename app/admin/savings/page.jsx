@@ -81,7 +81,8 @@ export default function SavingsPage() {
 
   const query = useMemo(() => {
     const r = dates(filter.range, calendarSystem);
-    return new URLSearchParams({ ...filter, from: r.from, to: r.to }).toString();
+    const month = dates('this_month', calendarSystem);
+    return new URLSearchParams({ ...filter, from: r.from, to: r.to, month_from: month.from }).toString();
   }, [filter, calendarSystem]);
 
   const load = useCallback(async () => {

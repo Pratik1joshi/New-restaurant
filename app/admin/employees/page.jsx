@@ -8,7 +8,9 @@ import {
 import PayrollDrawer from '@/components/employees/payroll-drawer';
 import { useToast } from '@/components/ui/toast';
 import { friendlyMessage, friendlyFromError } from '@/lib/friendly-message';
+import { nepalDateString } from '@/lib/report-dates.js';
 import { apiJson } from '@/lib/authed-fetch';
+import { useCapabilities } from '@/lib/use-capabilities';
 import FieldError, { inputErrorClass } from '@/components/ui/field-error';
 import DateInput from '@/components/ui/date-input.jsx';
 import {
@@ -21,6 +23,7 @@ import {
 } from '@/lib/form-validation';
 
 export default function EmployeesPage() {
+  const { can } = useCapabilities();
   const { addToast } = useToast();
   const [employees, setEmployees] = useState([]);
   const [departments, setDepartments] = useState([]);
@@ -34,6 +37,7 @@ export default function EmployeesPage() {
   const [formErrors, setFormErrors] = useState({});
   const [confirmAction, setConfirmAction] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [savingEmployee, setSavingEmployee] = useState(false);
 
   const [formData, setFormData] = useState({
     username: '',
@@ -44,6 +48,8 @@ export default function EmployeesPage() {
     phone: '',
     is_active: true,
     salary: '',
+    absence_daily_rate: '',
+    salary_effective_month: nepalDateString().slice(0, 7),
     position: '',
     hire_date: '',
     department_id: '',
@@ -83,6 +89,7 @@ export default function EmployeesPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (savingEmployee) return;
 
     const nextErrors = {
       full_name: validateName(formData.full_name, 'full name'),
@@ -100,6 +107,7 @@ export default function EmployeesPage() {
       return;
     }
 
+    setSavingEmployee(true);
     try {
       const token = localStorage.getItem('pos_token');
       const url = editingEmployee
@@ -114,6 +122,7 @@ export default function EmployeesPage() {
         },
         body: JSON.stringify({
           ...formData,
+          salary_effective_month: formData.salary_effective_month || undefined,
           phone: digitsOnly(formData.phone) || null,
           pin: digitsOnly(formData.pin),
         }),
@@ -133,6 +142,8 @@ export default function EmployeesPage() {
           phone: '',
           is_active: true,
           salary: '',
+          absence_daily_rate: '',
+          salary_effective_month: nepalDateString().slice(0, 7),
           position: '',
           hire_date: '',
           department_id: '',
@@ -148,6 +159,8 @@ export default function EmployeesPage() {
     } catch (error) {
       console.error('Error:', error);
       addToast(friendlyFromError(error, 'save_failed'));
+    } finally {
+      setSavingEmployee(false);
     }
   };
 
@@ -206,6 +219,8 @@ export default function EmployeesPage() {
       phone: employee.phone || '',
       is_active: !!employee.is_active,
       salary: employee.salary ?? '',
+      absence_daily_rate: employee.absence_daily_rate ?? '',
+      salary_effective_month: '',
       position: employee.position || '',
       hire_date: employee.hire_date ? String(employee.hire_date).slice(0, 10) : '',
       department_id: employee.department_id ?? '',
@@ -405,6 +420,8 @@ export default function EmployeesPage() {
                   phone: '',
                   is_active: true,
                   salary: '',
+                  absence_daily_rate: '',
+                  salary_effective_month: nepalDateString().slice(0, 7),
                   position: '',
                   hire_date: '',
                   department_id: '',
@@ -555,6 +572,16 @@ export default function EmployeesPage() {
                         />
                       </div>
                       <div>
+                        <label className="block text-sm font-medium text-gray-900 mb-2">Salary effective month (AD)</label>
+                        <input type="month" min={nepalDateString().slice(0, 7)} value={formData.salary_effective_month} onChange={(e) => setFormData({ ...formData, salary_effective_month: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900" />
+                        <p className="mt-1 text-xs text-gray-500">Defaults to this month. Past months keep their salary rate.</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-900 mb-2">Absence deduction per day (Rs)</label>
+                        <input type="number" min="0" step="0.01" value={formData.absence_daily_rate} onChange={(e) => setFormData({ ...formData, absence_daily_rate: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900" />
+                        <p className="mt-1 text-xs text-gray-500">Used for manually entered absent days when enabled in Settings.</p>
+                      </div>
+                      <div>
                         <label className="block text-sm font-medium text-gray-900 mb-2">Hire date</label>
                         <DateInput
                           value={formData.hire_date}
@@ -603,9 +630,10 @@ export default function EmployeesPage() {
                   <div className="flex space-x-4 pt-4">
                     <button
                       type="submit"
-                      className="flex-1 px-6 py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800"
+                      disabled={savingEmployee}
+                      className="flex-1 px-6 py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
                     >
-                      {editingEmployee ? 'Update' : 'Create'} Employee
+                      {savingEmployee ? 'Saving…' : `${editingEmployee ? 'Update' : 'Create'} Employee`}
                     </button>
                     <button
                       type="button"
@@ -887,7 +915,7 @@ export default function EmployeesPage() {
         </div>
       </div>
 
-      {payrollFor && <PayrollDrawer employee={payrollFor} onClose={() => setPayrollFor(null)} />}
+      {payrollFor && <PayrollDrawer employee={payrollFor} onClose={() => setPayrollFor(null)} canRecordSalary={can('payroll.payments.create')} canGiveAdvance={can('payroll.advances.create')} canDelete={can('payroll.records.delete')} />}
     </AdminLayout>
   );
 }

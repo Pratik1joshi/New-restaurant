@@ -16,8 +16,9 @@ import { Copy, ExternalLink, Plus, Trash2, X } from 'lucide-react';
 import { useToast } from '@/components/ui/toast';
 import { friendlyMessage, friendlyFromError } from '@/lib/friendly-message';
 import { apiJson, authedRequest } from '@/lib/authed-fetch';
+import { resolveConversionFactor } from '@/lib/unit-conversions.js';
 
-const blankLine = () => ({ raw_material_id: '', component_recipe_id: '', quantity: '', unit: '' });
+const blankLine = () => ({ raw_material_id: '', component_recipe_id: '', quantity: '', unit: '', loss_percent: 0 });
 
 export default function RecipePanel({ recipeId, seedType = 'menu_item', recipes, onClose, onSaved }) {
   const { addToast } = useToast();
@@ -28,6 +29,8 @@ export default function RecipePanel({ recipeId, seedType = 'menu_item', recipes,
   const [menuItems, setMenuItems] = useState([]);
   const [menuItemSearch, setMenuItemSearch] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [costPreview, setCostPreview] = useState(null);
+  const [previewError, setPreviewError] = useState('');
   const [form, setForm] = useState({
     name: '',
     type: seedType,
@@ -36,6 +39,7 @@ export default function RecipePanel({ recipeId, seedType = 'menu_item', recipes,
     yield_unit: '',
     prep_time_minutes: '',
     prep_notes: '',
+    is_active: 1,
   });
   const [lines, setLines] = useState([blankLine()]);
 
@@ -69,6 +73,7 @@ export default function RecipePanel({ recipeId, seedType = 'menu_item', recipes,
           yield_unit: r.yield_unit || '',
           prep_time_minutes: r.prep_time_minutes ?? '',
           prep_notes: r.prep_notes || '',
+          is_active: r.is_active ?? 1,
         });
         setLines(
           (r.items || []).length
@@ -77,6 +82,7 @@ export default function RecipePanel({ recipeId, seedType = 'menu_item', recipes,
                 component_recipe_id: l.component_recipe_id ? String(l.component_recipe_id) : '',
                 quantity: String(l.quantity ?? ''),
                 unit: l.unit || '',
+                loss_percent: l.loss_percent || 0,
               }))
             : [blankLine()]
         );
@@ -104,16 +110,20 @@ export default function RecipePanel({ recipeId, seedType = 'menu_item', recipes,
   const costed = useMemo(
     () =>
       lines.map((line) => {
-        const qty = Number(line.quantity || 0);
+        const qty = Number(line.quantity || 0) * (1 + Number(line.loss_percent || 0) / 100);
         if (line.raw_material_id) {
           const m = materialById.get(line.raw_material_id);
-          const unitCost = Number(m?.cost_per_unit || 0);
+          const from = line.unit || m?.consumption_unit || m?.unit;
+          const to = m?.consumption_unit || m?.unit;
+          const factor = from === to ? 1 : from === m?.purchase_unit ? Number(m?.conversion_factor || 1) : resolveConversionFactor(from, to);
+          const unitCost = Number(m?.cost_per_unit || 0) * (factor ?? 0);
           return {
             ...line,
             label: m?.item_name || 'Unknown item',
             unit: line.unit || m?.consumption_unit || m?.unit || '',
             unitCost,
             subtotal: qty * unitCost,
+            missingConversion: factor == null,
             kind: 'ingredient',
           };
         }
@@ -135,7 +145,7 @@ export default function RecipePanel({ recipeId, seedType = 'menu_item', recipes,
     [lines, materialById, recipeById]
   );
 
-  const foodCost = costed.reduce((s, l) => s + l.subtotal, 0);
+  const foodCost = costPreview?.total_cost == null ? costed.reduce((s, l) => s + l.subtotal, 0) : Number(costPreview.total_cost);
   const menuItem = menuItems.find((m) => String(m.id) === String(form.menu_item_id));
 
   // The form stores the stable id, while the field shows a human-readable
@@ -147,7 +157,7 @@ export default function RecipePanel({ recipeId, seedType = 'menu_item', recipes,
     if (selected) setMenuItemSearch(selected.name || '');
   }, [form.menu_item_id, menuItems]);
   const sellingPrice = Number(menuItem?.base_price ?? menuItem?.price ?? 0);
-  const profit = sellingPrice - foodCost;
+  const profit = sellingPrice - foodCost / (Number(form.yield_quantity) || 1);
   const margin = sellingPrice > 0 ? (profit / sellingPrice) * 100 : null;
   const perYield = Number(form.yield_quantity || 1) || 1;
 
@@ -175,15 +185,28 @@ export default function RecipePanel({ recipeId, seedType = 'menu_item', recipes,
       yield_quantity: Number(form.yield_quantity || 1),
       prep_time_minutes: form.prep_time_minutes === '' ? null : Number(form.prep_time_minutes),
       items: lines
-        .filter((l) => (l.raw_material_id || l.component_recipe_id) && Number(l.quantity) > 0)
+        .filter((l) => l.raw_material_id || l.component_recipe_id || String(l.quantity).trim() !== '')
         .map((l) => ({
           raw_material_id: l.raw_material_id ? Number(l.raw_material_id) : null,
           component_recipe_id: l.component_recipe_id ? Number(l.component_recipe_id) : null,
           quantity: Number(l.quantity),
           unit: l.unit || null,
+          loss_percent: Number(l.loss_percent || 0),
         })),
     };
   }
+
+  useEffect(() => {
+    let cancelled = false;
+    setCostPreview(null);
+    const timer = setTimeout(async () => {
+      try {
+        const data = await apiJson('/api/admin/recipes/preview', { method: 'POST', body: JSON.stringify(payload()) });
+        if (!cancelled) { setCostPreview(data.cost); setPreviewError(''); }
+      } catch (error) { if (!cancelled) setPreviewError(error.error || 'Cost preview unavailable.'); }
+    }, 400);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [form, lines]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function save() {
     if (!form.name.trim()) {
@@ -318,6 +341,7 @@ export default function RecipePanel({ recipeId, seedType = 'menu_item', recipes,
                   </div>
                   <span className="mt-1 block text-xs text-gray-500">e.g. 10 portions, 1 pot, 24 pieces. Food cost is divided by this.</span>
                 </Field>
+                <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(form.is_active)} onChange={(e) => set({ is_active: e.target.checked ? 1 : 0 })} />Recipe active</label>
                 <Field label="Prep time (minutes)">
                   <input type="number" value={form.prep_time_minutes} onChange={(e) => set({ prep_time_minutes: e.target.value })} className={INPUT} placeholder="Optional" />
                 </Field>
@@ -341,6 +365,7 @@ export default function RecipePanel({ recipeId, seedType = 'menu_item', recipes,
                       <th className="whitespace-nowrap px-3 py-2 font-semibold">Ingredient</th>
                       <th className="whitespace-nowrap px-3 py-2 font-semibold">Qty</th>
                       <th className="whitespace-nowrap px-3 py-2 font-semibold">Unit</th>
+                      <th className="whitespace-nowrap px-3 py-2 font-semibold">Prep loss %</th>
                       <th className="whitespace-nowrap px-3 py-2 text-right font-semibold">Cost</th>
                       <th className="whitespace-nowrap px-3 py-2 text-right font-semibold">Share</th>
                       <th className="whitespace-nowrap px-3 py-2 text-right font-semibold">Subtotal</th>
@@ -377,11 +402,12 @@ export default function RecipePanel({ recipeId, seedType = 'menu_item', recipes,
                         <td className="px-3 py-2">
                           <input value={line.unit} onChange={(e) => updateLine(i, { unit: e.target.value })} className="h-9 w-20 rounded-md border border-gray-300 px-2 text-sm" />
                         </td>
+                        <td className="px-3 py-2"><input type="number" min="0" max="100" step="0.1" aria-label="Preparation loss percent" value={line.loss_percent || 0} onChange={(e) => updateLine(i, { loss_percent: e.target.value })} className="h-9 w-20 rounded-md border border-gray-300 px-2 text-sm" /></td>
                         <td className="px-3 py-2 text-right tabular-nums text-gray-500">{line.unitCost ? `Rs ${line.unitCost.toFixed(3)}` : '—'}</td>
                         <td className="px-3 py-2 text-right tabular-nums text-gray-500">
                           {foodCost > 0 && line.subtotal > 0 ? `${((line.subtotal / foodCost) * 100).toFixed(0)}%` : '—'}
                         </td>
-                        <td className="px-3 py-2 text-right tabular-nums font-medium text-gray-900">Rs {line.subtotal.toFixed(2)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums font-medium text-gray-900">{line.missingConversion ? 'See server preview' : `Rs ${line.subtotal.toFixed(2)}`}</td>
                         <td className="px-2 py-2">
                           {lines.length > 1 && (
                             <button type="button" onClick={() => setLines((p) => p.filter((_, j) => j !== i))} className="text-gray-400 hover:text-red-600">
@@ -403,11 +429,13 @@ export default function RecipePanel({ recipeId, seedType = 'menu_item', recipes,
 
             <Step n={3} title="Cost & method" hint="Live preview from current ingredient costs. The server recalculates on save.">
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <Metric label="Food cost" value={`Rs ${foodCost.toFixed(2)}`} sub={`Rs ${(foodCost / perYield).toFixed(2)} per ${form.yield_unit || 'unit'}`} />
+                <Metric label="Estimated food cost" value={costPreview?.total_cost == null ? 'Unavailable' : `Rs ${foodCost.toFixed(2)}`} sub={costPreview?.total_cost == null ? 'Complete the recipe and cost mapping' : `Rs ${(foodCost / perYield).toFixed(2)} per ${form.yield_unit || 'unit'}`} />
                 <Metric label="Selling price" value={sellingPrice ? `Rs ${sellingPrice.toFixed(2)}` : '—'} sub={form.type === 'menu_item' ? 'From the menu item' : 'Sub-recipes are not sold'} />
-                <Metric label="Profit" value={sellingPrice ? `Rs ${profit.toFixed(2)}` : '—'} tone={profit < 0 ? 'red' : 'green'} />
-                <Metric label="Margin" value={margin === null ? '—' : `${margin.toFixed(1)}%`} tone={margin !== null && margin < 0 ? 'red' : 'green'} />
+                <Metric label="Estimated gross profit" value={costPreview?.total_cost != null && sellingPrice ? `Rs ${profit.toFixed(2)}` : 'Unavailable'} tone={profit < 0 ? 'red' : 'green'} />
+                <Metric label="Estimated gross margin" value={costPreview?.total_cost == null || margin === null ? 'Unavailable' : `${margin.toFixed(1)}%`} tone={margin !== null && margin < 0 ? 'red' : 'green'} />
               </div>
+              {previewError && <p role="status" className="mt-3 text-sm text-amber-800">{previewError}</p>}
+              {costPreview?.warnings?.map((warning) => <p key={warning} className="mt-2 text-sm text-amber-800">{warning}</p>)}
 
               <div className="mt-4">
                 <Field label="Prep notes">
@@ -418,11 +446,11 @@ export default function RecipePanel({ recipeId, seedType = 'menu_item', recipes,
 
             {confirmDelete && (
               <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
-                <p className="font-semibold">Delete {form.name}?</p>
-                <p className="mt-1">Its ingredient lines go too, and orders for the linked menu item stop deducting stock.</p>
+                <p className="font-semibold">Deactivate {form.name}?</p>
+                <p className="mt-1">History and ingredient definitions are retained. Reactivate this recipe before using it for new sales.</p>
                 <div className="mt-3 flex gap-2">
                   <button type="button" disabled={saving} onClick={remove} className="h-10 rounded-lg bg-red-600 px-4 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50">
-                    Delete it
+                    Deactivate
                   </button>
                   <button type="button" onClick={() => setConfirmDelete(false)} className="h-10 rounded-lg border border-red-300 bg-white px-4 text-sm font-medium text-red-800">
                     Keep it

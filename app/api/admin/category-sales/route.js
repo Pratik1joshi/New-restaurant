@@ -15,8 +15,10 @@ export async function GET(request) {
     const db = Database.getInstance();
     await ensureReportSchema(db);
 
-    const categories = await db.all('SELECT id, name FROM menu_categories ORDER BY name');
-    const categoryIds = String(q.get('categories') || '').split(',').map(Number).filter((id) => Number.isInteger(id) && id > 0);
+    const categories = await db.all('SELECT id, name FROM menu_categories WHERE is_active = 1 ORDER BY name');
+    const activeIds = new Set(categories.map((category) => Number(category.id)));
+    const categoryIds = [...new Set(String(q.get('categories') || '').split(',').map(Number))]
+      .filter((id) => Number.isInteger(id) && activeIds.has(id));
 
     const range = resolvePeriodRange(q.get('period') || 'today', q.get('startDate'), q.get('endDate'), { calendarSystem: q.get('calendarSystem') });
     const filters = { businessDayId: Number(q.get('businessDayId')) || null };

@@ -22,7 +22,7 @@ import { ensureOrderColumns } from '@/lib/online-orders.js';
 import { ensureDeliverySchema } from '@/lib/delivery.js';
 import { ensurePromotionSchema, evaluatePromotion, recalculatePromotionById, recordPromotionRedemption, normalizePromotion } from '@/lib/promotions.js';
 import { isPromotionScheduledNow } from '@/lib/promotion-display.js';
-import { normalizePaymentMethod } from '@/lib/payment-allocations.js';
+import { normalizePaymentMethod, paymentRemarks } from '@/lib/payment-allocations.js';
 
 const round2 = (v) => Math.round((Number(v) + Number.EPSILON) * 100) / 100;
 const EPS = 0.01;
@@ -581,6 +581,7 @@ export async function POST(request, context) {
         already_paid: result.alreadyPaid,
         due: result.due,
         allocations: result.payment.allocations,
+        remarks: paymentRemarks(result.payment.allocations || []),
         outstanding: result.payment.outstanding,
         change,
         payment_status: result.payment.status,

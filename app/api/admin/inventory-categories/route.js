@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import Database from '@/lib/db/index';
 import { requireAuth, handleRouteError } from '@/lib/api-guard.js';
+import { ensureRecipeTables } from '@/lib/recipes.js';
+import { inventoryCategoryMasters } from '@/lib/inventory-master.js';
 import {
   ensureInventoryCategorySchema,
   listInventoryCategories,
@@ -17,7 +19,10 @@ export async function GET(request) {
 
     const db = Database.getInstance();
     await ensureInventoryCategorySchema(db);
-    return NextResponse.json({ categories: await listInventoryCategories(db) });
+    await ensureRecipeTables(db);
+    const [categories, mappings] = await Promise.all([listInventoryCategories(db), inventoryCategoryMasters(db)]);
+    const byId = new Map(mappings.map((row) => [row.id, row]));
+    return NextResponse.json({ categories: categories.map((category) => ({ ...category, ...byId.get(category.id) })) });
   } catch (error) {
     return handleRouteError(error, 'Failed to load inventory categories');
   }
@@ -31,7 +36,7 @@ export async function POST(request) {
     const data = await request.json();
     const db = Database.getInstance();
     await ensureInventoryCategorySchema(db);
-    const category = await createInventoryCategory(db, data.name);
+    const category = await createInventoryCategory(db, data.name, data.food_group);
     return NextResponse.json({ message: 'Category saved.', category }, { status: 201 });
   } catch (error) {
     return handleRouteError(error, 'Failed to create inventory category');
@@ -48,7 +53,7 @@ export async function PUT(request) {
 
     const db = Database.getInstance();
     await ensureInventoryCategorySchema(db);
-    const category = await updateInventoryCategory(db, data.id, data.name);
+    const category = await updateInventoryCategory(db, data.id, data.name, data.food_group);
     return NextResponse.json({ message: 'Category updated.', category });
   } catch (error) {
     return handleRouteError(error, 'Failed to update inventory category');

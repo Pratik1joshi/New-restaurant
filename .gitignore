@@ -62,5 +62,8 @@ POS_Distribution*
 !scripts/**/*.cjs
 
 # local tooling
+/.build-tmp/
+/analytics-*.log
+/test-results/
 tmp-*.mjs
 tmp-*.js

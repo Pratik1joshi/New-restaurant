@@ -45,7 +45,15 @@ export default function CategorySalesPage() {
       const params = new URLSearchParams({ period, calendarSystem, categories: selected.join(',') });
       if (period === 'custom') { params.set('startDate', from); params.set('endDate', to); }
       const next = await apiJson(`/api/admin/category-sales?${params}`);
-      if (request === latest.current) setData(next);
+      if (request === latest.current) {
+        setData(next);
+        const activeIds = new Set(next.categories.map((category) => Number(category.id)));
+        const activeSelection = selected.filter((id) => activeIds.has(Number(id)));
+        if (activeSelection.length !== selected.length) {
+          setSelected(activeSelection);
+          try { localStorage.setItem(SAVED_KEY, JSON.stringify(activeSelection)); } catch { /* storage blocked */ }
+        }
+      }
     } catch (e) {
       if (request === latest.current) setError(e.error || e.message || 'Could not load the report.');
     } finally {

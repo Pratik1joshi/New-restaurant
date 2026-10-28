@@ -204,7 +204,7 @@ export async function POST(request) {
         customer: customerInfo.customer, actorId: auth.user?.id || null, requestKey: idempotencyKey,
         businessDayId,
       });
-      const stock = await deductStockForItems(tx, items, { orderId, performedBy: auth.user?.id || null });
+      const stock = await deductStockForItems(tx, items, { orderId, performedBy: auth.user?.id || null, operationKey: `order:${orderId}:checkout` });
       await tx.run('UPDATE orders SET payment_status=?, payment_method=?, stock_consumed=1 WHERE id=?', [payment.status, allocations.length > 1 ? 'split' : allocations[0].method, orderId]);
       return { orderId, billId, order_number: orderNumber, bill_number: billNumber, customer: customerInfo, stock, totals, payment };
     });

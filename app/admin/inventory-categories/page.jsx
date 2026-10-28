@@ -7,6 +7,8 @@ import { useToast } from '@/components/ui/toast';
 import { useConfirm } from '@/components/ui/confirm';
 import { friendlyMessage, friendlyFromError } from '@/lib/friendly-message';
 import { apiJson } from '@/lib/authed-fetch';
+import { FOOD_GROUPS, foodGroupLabel } from '@/lib/food-groups';
+import { inventoryMaster } from '@/lib/inventory-master';
 
 export default function InventoryCategoriesPage() {
   const { addToast } = useToast();
@@ -16,6 +18,7 @@ export default function InventoryCategoriesPage() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [name, setName] = useState('');
+  const [foodGroup, setFoodGroup] = useState('');
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
@@ -34,12 +37,14 @@ export default function InventoryCategoriesPage() {
   }, []);
 
   const openCreate = () => {
+    setFoodGroup('');
     setEditing(null);
     setName('');
     setShowForm(true);
   };
 
   const openEdit = (c) => {
+    setFoodGroup(c.food_group ? inventoryMaster(c) : '');
     setEditing(c);
     setName(c.name);
     setShowForm(true);
@@ -55,7 +60,7 @@ export default function InventoryCategoriesPage() {
     try {
       await apiJson('/api/admin/inventory-categories', {
         method: editing ? 'PUT' : 'POST',
-        body: JSON.stringify({ name: name.trim(), id: editing?.id }),
+        body: JSON.stringify({ name: name.trim(), id: editing?.id, food_group: foodGroup || null }),
       });
       addToast(friendlyMessage('save_success', { description: editing ? 'Category updated.' : 'Category added.' }));
       setShowForm(false);
@@ -115,6 +120,14 @@ export default function InventoryCategoriesPage() {
                   <h2 className="text-2xl font-bold text-gray-800">{editing ? 'Edit Category' : 'Add Category'}</h2>
                 </div>
                 <form onSubmit={submit} className="admin-form-stack" noValidate>
+                  <label className="block">Master category
+                    <select value={foodGroup} onChange={(e) => setFoodGroup(e.target.value)} className="mt-2 h-11 w-full rounded-xl border px-4">
+                      <option value="">Automatic from linked menu items / recipes</option>
+                      <option value="uncategorised">Uncategorised</option>
+                      {FOOD_GROUPS.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
+                    </select>
+                    <span className="mt-1 block text-xs text-gray-600">Linked menu items and recipes determine the master for each item when they agree. Shared items need an assignment. Unlinked items use the category-name fallback ({foodGroupLabel(inventoryMaster({ name }))}). A saved assignment overrides this for every item in this category.</span>
+                  </label>
                   <label className="block">
                     <span className="mb-2 block text-sm font-medium text-gray-700">Category name *</span>
                     <input
@@ -155,6 +168,7 @@ export default function InventoryCategoriesPage() {
                 <thead className="border-b border-gray-200 bg-gray-50">
                   <tr>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Category</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Master category</th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Items</th>
                     <th className="px-6 py-4 text-right text-sm font-semibold text-gray-700">Actions</th>
                   </tr>
@@ -163,6 +177,7 @@ export default function InventoryCategoriesPage() {
                   {categories.map((c) => (
                     <tr key={c.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 font-medium text-gray-900">{c.name}</td>
+                      <td className="px-6 py-4 text-gray-700">{(c.masters || [inventoryMaster(c)]).map(foodGroupLabel).join(' / ')}{!c.food_group && <span className="ml-1 text-xs text-gray-500">(automatic per item)</span>}{Number(c.mapping_conflicts) > 0 && <span className="mt-1 block text-xs text-amber-800">{c.mapping_conflicts} shared item(s) need an assignment</span>}</td>
                       <td className="px-6 py-4 text-gray-700">{c.item_count ?? 0}</td>
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-end gap-2">

@@ -48,6 +48,11 @@ const PAYMENT_METHODS = [
 export default function LogExpenseModal({ editingExpense, initialCategory, payrollMode = false, onClose, onSaved }) {
   const { addToast } = useToast();
   const { confirm } = useConfirm();
+  const [staff, setStaff] = useState([]);
+  const [staffError, setStaffError] = useState('');
+  const [employeeId, setEmployeeId] = useState('');
+  const [staffPaymentType, setStaffPaymentType] = useState('advance');
+  const [salaryMonth, setSalaryMonth] = useState(nepalDateString().slice(0, 7));
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const closedCorrection = editingExpense?.business_day_status === 'closed';
@@ -63,6 +68,15 @@ export default function LogExpenseModal({ editingExpense, initialCategory, payro
     notes: editingExpense?.notes || '',
     receipt_url: editingExpense?.receipt_url || '',
   });
+  const staffPayment = !editingExpense && form.category === 'salaries';
+  useEffect(() => {
+    if (!staffPayment) return;
+    authedRequest('/api/admin/payroll').then(async (r) => {
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Unable to load staff.');
+      setStaff(data.employees || []);
+    }).catch((error) => setStaffError(error.message));
+  }, [staffPayment]);
   // Managed expense categories (from the Expense Categories page), merged with
   // the built-in set so both the fixed vocabulary and custom ones are pickable.
   const [managedCats, setManagedCats] = useState([]);
@@ -109,8 +123,24 @@ export default function LogExpenseModal({ editingExpense, initialCategory, payro
       return;
     }
 
+    if (staffPayment && !employeeId) {
+      addToast(friendlyMessage('validation', { description: 'Select the staff member receiving this payment.' })); return;
+    }
+    if (staffPayment && !['cash', 'online', 'business_funding'].includes(form.payment_method)) {
+      addToast(friendlyMessage('validation', { description: 'Choose Cash, Online or Business Funding for staff payments.' })); return;
+    }
     setSaving(true);
     try {
+      if (staffPayment) {
+        const res = await authedRequest('/api/admin/payroll', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ request_key: requestKey, use_business_funding: useBusinessFunding, type: staffPaymentType, employee_id: Number(employeeId), amount: Number(form.amount),
+            gross_amount: Number(form.amount), advance_deduction: 0, method: form.payment_method,
+            paid_on: form.purchase_date, advanced_on: form.purchase_date, salary_month: salaryMonth, period_label: salaryMonth,
+            note: [form.description, form.notes, form.receipt_url].filter(Boolean).join(' | ') }) });
+        const data = await res.json(); if (!res.ok) throw data;
+        addToast(friendlyMessage('save_success', { description: 'Staff payment saved in Payroll. Salary balance updated.' }));
+        onSaved?.(); onClose(); return;
+      }
       const url = editingExpense ? '/api/admin/expenses' : '/api/admin/expenses';
       const method = editingExpense ? 'PUT' : 'POST';
       const res = await authedRequest(url, {
@@ -128,7 +158,7 @@ export default function LogExpenseModal({ editingExpense, initialCategory, payro
         setSaving(false);
         const approved = await confirm({
           title: 'Use Business Funding?',
-          message: `${error.error || error.message}\n\nAvailable in Business Funding on that date: Rs ${Number(error.available || 0).toFixed(2)}.`,
+          message: `${error.error || error.message}\n\nAvailable in Business Funding: Rs ${Number(error.available || 0).toFixed(2)}.`,
           confirmLabel: `Use Rs ${Number(error.shortfall || 0).toFixed(2)}`,
           tone: 'warning',
         });
@@ -143,11 +173,20 @@ export default function LogExpenseModal({ editingExpense, initialCategory, payro
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent onClose={onClose} className={adminDialogMd}>
+      <DialogContent role="dialog" aria-modal="true" aria-label="Log expense or staff payment" onClose={onClose} className={adminDialogMd}>
         <DialogHeader>
           <DialogTitle>{closedCorrection ? 'Correct Closed Expense' : payrollMode ? 'Add Salary' : editingExpense ? 'Edit Expense' : 'Log New Expense'}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className={`mt-6 ${adminFieldStackClass}`}>
+          {staffPayment && <div className="space-y-4 rounded-xl border border-gray-200 p-4">
+            <AdminField label="Staff member"><select required value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className={adminInputClass}>
+              <option value="">Select staff</option>{staff.map((person) => <option key={person.id} value={person.id}>{person.full_name || person.username}</option>)}
+            </select></AdminField>
+            {staffError && <p className="text-sm text-red-600">{staffError}</p>}
+            <AdminField label="Payment type"><select value={staffPaymentType} onChange={(e) => setStaffPaymentType(e.target.value)} className={adminInputClass}><option value="advance">Salary advance</option><option value="payment">Salary payment</option></select></AdminField>
+            {staffPaymentType === 'payment' && <AdminField label="Salary month (AD)"><input required type="month" value={salaryMonth} onChange={(e) => setSalaryMonth(e.target.value)} className={adminInputClass} /></AdminField>}
+            <p className="text-xs text-gray-500">Saved once in Payroll with the staff member&apos;s payment history and salary balance. Manage it from Salary &amp; Advances.</p>
+          </div>}
           <AdminField label={payrollMode ? 'Salary Title (e.g. "October salary - Bikash")' : 'Expense Title'}>
             <input
               type="text"
@@ -181,17 +220,17 @@ export default function LogExpenseModal({ editingExpense, initialCategory, payro
             </AdminField>
             <AdminField label="Payment Method">
               <select disabled={closedCorrection} className={adminInputClass} value={form.payment_method} onChange={(e) => setForm((f) => ({ ...f, payment_method: e.target.value }))}>
-                {PAYMENT_METHODS.map((m) => (
+                {PAYMENT_METHODS.filter((m) => !staffPayment || ['cash', 'online', 'business_funding'].includes(m.value)).map((m) => (
                   <option key={m.value} value={m.value}>{m.label}</option>
                 ))}
               </select>
-              <p className="mt-1.5 text-xs text-gray-500">Owner Pocket records owner equity directly; it does not create fake Cash In.</p>
+              {!staffPayment && <p className="mt-1.5 text-xs text-gray-500">Owner Pocket records owner equity directly; it does not create fake Cash In.</p>}
             </AdminField>
           </div>
 
-          <AdminField label={payrollMode ? 'Employee Name' : 'Paid To / Vendor Name'}>
+          {!staffPayment && <AdminField label={payrollMode ? 'Employee Name' : 'Paid To / Vendor Name'}>
             <input type="text" className={adminInputClass} value={form.supplier} onChange={(e) => setForm((f) => ({ ...f, supplier: e.target.value }))} />
-          </AdminField>
+          </AdminField>}
 
           <AdminField label="Notes / Reference No">
             <textarea className={adminTextareaClass} rows={3} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} />

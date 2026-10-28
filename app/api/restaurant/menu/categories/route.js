@@ -43,7 +43,7 @@ export async function GET(request) {
       categories = (categories || []).map((c) => ({ ...c, food_group: DEFAULT_FOOD_GROUP }));
     }
 
-    return NextResponse.json({ categories });
+    return NextResponse.json({ categories: categories.map((category) => ({ ...category, food_group: normalizeFoodGroup(category.food_group) })) });
   } catch (error) {
     return handleRouteError(error, 'Failed to fetch categories');
   }

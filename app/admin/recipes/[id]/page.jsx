@@ -92,9 +92,9 @@ export default function RecipeProfilePage() {
   }
 
   const sellingPrice = Number(recipe.menu_item_price || 0);
-  const foodCost = Number(recipe.cost?.total_cost || 0);
-  const profit = sellingPrice - foodCost;
-  const margin = sellingPrice > 0 ? (profit / sellingPrice) * 100 : null;
+  const foodCost = recipe.cost?.total_cost == null ? null : Number(recipe.cost.total_cost);
+  const profit = foodCost == null ? null : sellingPrice - foodCost / (Number(recipe.yield_quantity) || 1);
+  const margin = sellingPrice > 0 && profit != null ? (profit / sellingPrice) * 100 : null;
   const isMenuItem = recipe.type === 'menu_item';
 
   return (

@@ -56,7 +56,7 @@ export async function PUT(request, { params }) {
       // Cashiers cannot re-attribute a historical delivery to another user.
       received_by: auth.user?.role === 'cashier' ? undefined : data.received_by ?? auth.user?.id ?? null,
     });
-    return NextResponse.json({ message: 'Purchase updated and stock re-applied.', purchase });
+    return NextResponse.json({ message: 'Purchase updated.', purchase });
   } catch (error) {
     return handleRouteError(error, 'Failed to update purchase');
   }

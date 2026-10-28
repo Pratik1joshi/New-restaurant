@@ -27,6 +27,7 @@ export default function OrderView() {
   const [order, setOrder] = useState(null);
   const [items, setItems] = useState([]);
   const [payments, setPayments] = useState([]);
+  const [paymentRemarks, setPaymentRemarks] = useState([]);
   const [activity, setActivity] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -51,6 +52,7 @@ export default function OrderView() {
         setOrder(data.order);
         setItems(data.items || []);
         setPayments(data.payments || []);
+        setPaymentRemarks(data.payment_remarks || []);
         setActivity(data.activity || []);
       }
     } catch (error) {
@@ -248,7 +250,7 @@ export default function OrderView() {
       });
       return;
     }
-    const receipt = receiptFromOrderDetail({ order, items, payments, activity, settings: paySettings });
+    const receipt = receiptFromOrderDetail({ order, items, payments, activity, settings: paySettings, payment_remarks: paymentRemarks });
     if (!receipt?.items?.length) {
       await alert({ title: 'Empty bill', message: 'There are no items on this bill to print.', tone: 'warning' });
       return;
@@ -601,6 +603,13 @@ export default function OrderView() {
                       <span className="font-semibold">{formatCurrency(p.amount)}</span>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {paymentRemarks.length > 0 && (
+                <div className="mt-4 rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-800">
+                  <p className="font-medium text-gray-700">Payment remark</p>
+                  {paymentRemarks.map((remark) => <p key={remark} className="mt-1 whitespace-pre-line">{remark}</p>)}
                 </div>
               )}
             </div>

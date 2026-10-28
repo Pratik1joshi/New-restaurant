@@ -24,7 +24,8 @@ export async function GET(request) {
     await ensureSavingsSchema(db);
     const q = new URL(request.url).searchParams;
     const today = nepalDateString();
-    const monthStart = `${today.slice(0, 7)}-01`;
+    // Client sends the calendar-aware (BS/AD) month start so the card matches the "This Month" list filter.
+    const monthStart = q.get('month_from') || `${today.slice(0, 7)}-01`;
     const from = q.get('from') || monthStart;
     const to = q.get('to') || today;
     const search = String(q.get('search') || '').trim().toLowerCase();

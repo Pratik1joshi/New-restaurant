@@ -207,3 +207,15 @@ test('credit statements default to the 80mm thermal roll and still print A4 when
   assert.match(a4, /@page \{ size: A4;/);
   assert.match(a4, /width: 190mm/);
 });
+
+test('payment remarks print only when switched on in Printer settings', () => {
+  const receipt = {
+    bill_number: 'B-9', order_number: 'O-9', items: [{ item_name: 'Tea', quantity: 1, price: 50, subtotal: 50 }],
+    subtotal: 50, grand_total: 50, allocations: [{ method: 'cash', amount: 50 }], outstanding: 0, payment_status: 'paid',
+    remarks: ['Paid by son <Ram>'],
+  };
+  const off = withStubbedPrintWindow(() => printFinalBill(receipt));
+  assert.doesNotMatch(off, /Paid by son/);
+  const on = withStubbedPrintWindow(() => printFinalBill(receipt, { settings: { bill_show_remarks: 'true' } }));
+  assert.match(on, /Remark: <\/span><span class="r-b">Paid by son &lt;Ram&gt;/);
+});

@@ -21,6 +21,7 @@ export default defineConfig({
   reporter: [['list']],
   use: {
     baseURL,
+    channel: process.env.E2E_BROWSER_CHANNEL || undefined,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },

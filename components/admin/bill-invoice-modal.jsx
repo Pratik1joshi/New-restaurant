@@ -183,6 +183,11 @@ export default function BillInvoiceModal({ billId, onClose }) {
             <Section title="Payment history">
               {paymentHistory.length ? paymentHistory.map((payment) => <div key={`${payment.method}-${payment.id}`} className="flex items-center justify-between py-1 text-sm"><span className="text-gray-600">{payment.method === 'cash' ? 'Cash' : payment.method === 'credit' ? 'Credit / Due' : 'Online'}{payment.reference ? ` · ${payment.reference}` : ''}</span><span className="tabular-nums">{formatValue(payment.amount, 'currency')}</span></div>) : <p className="text-sm text-gray-400">No payments recorded.</p>}
             </Section>
+            {bill.remarks?.length ? (
+              <Section title="Remark">
+                {bill.remarks.map((remark) => <p key={remark} className="py-1 text-sm text-gray-700 whitespace-pre-line">{remark}</p>)}
+              </Section>
+            ) : null}
 
             <Section title="Activity timeline">
               {bill.activity.length ? bill.activity.map((activity) => <div key={activity.id} className="flex items-start gap-2 py-1.5 text-xs"><History className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gray-300" /><div className="min-w-0 flex-1"><p className="text-gray-700">{String(activity.event).replaceAll('_', ' ')}{activity.actor ? ` · ${activity.actor}` : ''}</p>{activity.reason && <p className="text-gray-400">“{activity.reason}”</p>}<p className="text-gray-300">{formatNepalDateTime(activity.createdAt)}</p></div></div>) : <p className="text-sm text-gray-400">No activity recorded.</p>}

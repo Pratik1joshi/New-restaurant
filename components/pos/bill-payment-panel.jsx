@@ -16,6 +16,7 @@ import SplitPaymentFields, { emptySplitPayment } from '@/components/billing/spli
 import ServiceChargeField from '@/components/billing/service-charge-field';
 import DateInput from '@/components/ui/date-input.jsx';
 import QrEnlargeModal from '@/components/billing/qr-enlarge-modal';
+import PaymentRemarkField from '@/components/billing/payment-remark-field';
 import { usePaymentQr } from '@/lib/payment-qr.js';
 
 function QrCodeButtons({ settings, amount, onOpen }) {
@@ -512,6 +513,12 @@ export default function BillPaymentPanel({
                   onChange={onSplitPaymentChange}
                   customer={customerSelection?.customer}
                   settings={settings}
+                />
+              )}
+              {paymentMethod !== 'split' && (
+                <PaymentRemarkField
+                  value={splitPayment?.notes}
+                  onChange={(notes) => onSplitPaymentChange?.({ ...(splitPayment || emptySplitPayment), notes })}
                 />
               )}
             </>

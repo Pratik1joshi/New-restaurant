@@ -65,7 +65,7 @@ export default function SummaryReportPage(){
         <div className="grid gap-5 lg:grid-cols-2 xl:grid-cols-3">
           <Section title="Total Purchase" rows={[line('Business Cash',d.purchases.cash),line('Business Bank / Online',d.purchases.bank),line('Owner / Business Funding',d.purchases.funding),line('Supplier Credit',d.purchases.credit),line('Total Purchase',d.purchases.total)]}/>
           <Section title="Total Expense" rows={[line('Business Cash',d.expenses.cash),line('Business Bank / Online',d.expenses.bank),line('Owner / Business Funding',d.expenses.funding),line('Credit Expense',d.expenses.credit),line('Total Expense',d.expenses.total)]}/>
-          <Section title="Total Salary Paid" rows={[line('Cash / bank paid now',d.salary.cash+d.salary.bank),line('Advance deductions',d.salary.advance_deductions),line('Gross salary expense',d.salary.total)]}/>
+          <Section title="Salary Payments & Adjustments" rows={[line('Business Cash',d.salary.cash),line('Bank / Online',d.salary.bank),line('Business Funding',d.salary.funding||0),line('Advance deductions',d.salary.advance_deductions),line('Advance deductions waived',d.salary.waived||0),line('Gross salary expense',d.salary.total)]}/>
         </div>
         </ReportGroup>
         <ReportGroup title="Cash Position" note="Where the money sits now, and how the drawer reconciles." tint="amber">

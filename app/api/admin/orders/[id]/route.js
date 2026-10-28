@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { paymentRemarks } from '@/lib/payment-allocations.js';
 import Database from '@/lib/db/index';
 import { requireAuth, handleRouteError } from '@/lib/api-guard.js';
 import { ensureOrderColumns } from '@/lib/online-orders.js';
@@ -105,7 +106,12 @@ export async function GET(request, { params }) {
           )
           .catch(() => null);
 
-    return NextResponse.json({ order, items, customer, payments, activity });
+    const allocationNotes = order.bill_id
+      ? await db.all('SELECT notes FROM bill_payment_allocations WHERE bill_id = ? ORDER BY id', [order.bill_id]).catch(() => [])
+      : [];
+    const payment_remarks = paymentRemarks(payments, allocationNotes);
+
+    return NextResponse.json({ order, items, customer, payments, payment_remarks, activity });
   } catch (error) {
     return handleRouteError(error, 'Failed to fetch order details');
   }

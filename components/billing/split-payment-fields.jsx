@@ -97,7 +97,7 @@ export default function SplitPaymentFields({
       )}
 
       <label className="block text-xs font-semibold text-slate-700">
-        Payment notes (optional)
+        Remark (optional)
         <textarea
           rows={2}
           value={value.notes}

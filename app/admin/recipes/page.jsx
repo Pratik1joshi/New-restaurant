@@ -47,15 +47,15 @@ export default function RecipesPage() {
   const rows = useMemo(() => {
     const enriched = recipes.map((r) => {
       const price = Number(r.menu_item_price || 0);
-      const cost = Number(r.food_cost || 0);
+      const cost = r.food_cost == null ? null : Number(r.food_cost) / (Number(r.yield_quantity) || 1);
       return {
         ...r,
         price,
         cost,
-        margin: price > 0 ? ((price - cost) / price) * 100 : null,
+        margin: price > 0 && cost != null ? ((price - cost) / price) * 100 : null,
         // A recipe with no lines never deducts anything; a menu recipe with no
         // menu item never fires at all. Both are worth flagging.
-        state: !Number(r.item_count) ? 'empty' : r.type === 'menu_item' && !r.menu_item_id ? 'unlinked' : 'active',
+        state: Number(r.is_active) === 0 ? 'inactive' : !Number(r.item_count) ? 'empty' : r.type === 'menu_item' && !r.menu_item_id ? 'unlinked' : 'active',
       };
     });
     return typeFilter === 'all' ? enriched : enriched.filter((r) => r.type === typeFilter);
@@ -99,7 +99,7 @@ export default function RecipesPage() {
         align: 'right',
         numeric: true,
         className: 'text-gray-900 font-medium',
-        render: (r) => `Rs ${r.cost.toFixed(2)}`,
+        render: (r) => r.cost == null ? 'Missing cost' : `Rs ${r.cost.toFixed(2)}`,
       },
       {
         key: 'margin',

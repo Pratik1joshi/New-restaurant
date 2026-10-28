@@ -42,6 +42,7 @@ async function api(url, options = {}) {
     headers: {
       Authorization: `Bearer ${token()}`,
       ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(options.method === 'POST' && /\/pos\/orders\/\d+\/items$/.test(url) ? { 'Idempotency-Key': uid() } : {}),
       ...(options.headers || {}),
     },
   });

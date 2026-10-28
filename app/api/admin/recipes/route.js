@@ -96,7 +96,7 @@ export async function DELETE(request) {
 
     const db = Database.getInstance();
     await deleteRecipe(db, id);
-    return NextResponse.json({ message: 'Recipe deleted successfully' });
+    return NextResponse.json({ message: 'Recipe deactivated; historical definitions retained.' });
   } catch (error) {
     return handleRouteError(error, 'Failed to delete recipe');
   }

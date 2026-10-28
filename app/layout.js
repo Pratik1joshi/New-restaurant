@@ -1,13 +1,9 @@
-import { Geist, Geist_Mono } from 'next/font/google'
 import './globals.css'
 import { AuthProvider } from '@/lib/auth-context'
 import { ToastProvider } from '@/components/ui/toast'
 import { ConfirmProvider } from '@/components/ui/confirm'
 import { RESTAURANT } from '@/lib/restaurant-info.js'
 import { CalendarSystemProvider } from '@/lib/calendar-context.jsx'
-
-const _geist = Geist({ subsets: ["latin"] });
-const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 const SITE_DESCRIPTION = `${RESTAURANT.tagline}.` // no phone: it is CMS-managed and this is static
 

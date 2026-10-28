@@ -15,6 +15,7 @@ import CustomerModePicker, {
 import BillConfirmModal from '@/components/billing/bill-confirm-modal';
 import DateInput from '@/components/ui/date-input.jsx';
 import QrEnlargeModal from '@/components/billing/qr-enlarge-modal';
+import PaymentRemarkField from '@/components/billing/payment-remark-field';
 import { usePaymentQr } from '@/lib/payment-qr.js';
 import { calculateBillTotals, parseSettingsRates, resolveServiceCharge } from '@/lib/billing-totals';
 import ServiceChargeField, { emptyServiceCharge, serviceChargePayload } from '@/components/billing/service-charge-field';
@@ -87,7 +88,8 @@ export default function WalkInBilling({ variant = 'admin' }) {
           restaurant_name: data.settings.restaurant_name || 'Restaurant',
           restaurant_address: data.settings.restaurant_address || '',
           vat_number: data.settings.vat_number || '',
-          pan_number: data.settings.pan_number || ''
+          pan_number: data.settings.pan_number || '',
+          bill_show_remarks: data.settings.bill_show_remarks
         });
       }
     } catch (error) {
@@ -601,6 +603,7 @@ export default function WalkInBilling({ variant = 'admin' }) {
           ${billData.total - billData.amount_paid > 0 ? `<div class="total-row"><span>Outstanding:</span><span>Rs ${(billData.total - billData.amount_paid).toFixed(2)}</span></div>` : ''}
           <div class="total-row"><span>Payment status:</span><span>${billData.total - billData.amount_paid > 0 ? 'PARTIALLY PAID' : 'PAID'}</span></div>
           ${billData.allocations.some((a) => a.method === 'credit') ? `<div class="total-row"><span>Credit customer:</span><span>${billData.customer_name}</span></div>` : ''}
+          ${String(settings.bill_show_remarks) === 'true' ? [...new Set(billData.allocations.map((a) => String(a.notes || '').trim()).filter(Boolean))].map((r) => `<div class="total-row"><span>Remark: ${r.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))}</span></div>`).join('') : ''}
           ${billData.allocations.find((a) => a.method === 'credit')?.due_date ? `<div class="total-row"><span>Credit due date:</span><span>${formatCalendarDate(billData.allocations.find((a) => a.method === 'credit').due_date)}</span></div>` : ''}
           ${billData.allocations.find((a) => a.method === 'qr')?.reference ? `<div class="total-row"><span>QR reference:</span><span>${billData.allocations.find((a) => a.method === 'qr').reference}</span></div>` : ''}
           ${billData.change > 0 ? `
@@ -1180,6 +1183,9 @@ export default function WalkInBilling({ variant = 'admin' }) {
                   customer={customerSelection.customer}
                   settings={settings}
                 />
+              )}
+              {paymentMethod !== 'split' && (
+                <PaymentRemarkField value={splitPayment.notes} onChange={(notes) => setSplitPayment((sp) => ({ ...sp, notes }))} />
               )}
 
               <div className="flex gap-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">

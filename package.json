@@ -18,6 +18,7 @@
     "db:compare": "node scripts/compare-db-snapshots.mjs",
     "db:seed": "node scripts/seed-postgres.mjs",
     "db:seed-sqlite-week": "node --import ./tests/unit/loader-register.mjs scripts/seed-sqlite-week-demo.mjs",
+    "db:seed-sqlite-analytics": "node --import ./tests/unit/loader-register.mjs scripts/seed-sqlite-analytics-demo.mjs",
     "db:pg:init": "node scripts/migrate.mjs && node scripts/seed-postgres.mjs",
     "health": "node scripts/healthcheck.mjs",
     "test:e2e": "playwright test",
