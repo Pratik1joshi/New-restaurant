@@ -68,6 +68,7 @@ export default function PurchasesPage() {
   const [supplierFilter, setSupplierFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [paymentFilter, setPaymentFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState({ calendarSystem: null, from: '', to: '' });
   const defaultDateRange = useMemo(
     () => resolvePeriodRange('this_month', null, null, { calendarSystem }),
@@ -93,9 +94,16 @@ export default function PurchasesPage() {
   }, [searchParams]);
 
   const filters = useMemo(
-    () => ({ supplier_id: supplierFilter, status: statusFilter, payment_method: paymentFilter, from, to }),
-    [supplierFilter, statusFilter, paymentFilter, from, to]
+    () => ({ supplier_id: supplierFilter, status: statusFilter, payment_method: paymentFilter, category_id: categoryFilter, from, to }),
+    [supplierFilter, statusFilter, paymentFilter, categoryFilter, from, to]
   );
+  const categoryOptions = useMemo(() => {
+    const byId = new Map();
+    for (const item of items) {
+      if (item.category_id && !byId.has(item.category_id)) byId.set(item.category_id, item.category || `Category ${item.category_id}`);
+    }
+    return [...byId].sort((a, b) => a[1].localeCompare(b[1]));
+  }, [items]);
 
   const {
     rows: purchases,
@@ -184,6 +192,7 @@ export default function PurchasesPage() {
         render: (r) => formatNepalDate(r.invoice_date || r.created_at),
       },
       { key: 'supplier', label: 'Supplier', value: (r) => r.supplier_name || r.supplier || '', render: (r) => r.supplier_name || r.supplier || <span className="text-gray-300">Not recorded</span> },
+      { key: 'item_names', label: 'Items (quantity · unit · rate)', wrap: true, className: 'min-w-64 max-w-md text-gray-600' },
       { key: 'line_count', label: 'Lines', align: 'right', numeric: true, value: (r) => Number(r.line_count || 0) },
       {
         key: 'total',
@@ -310,6 +319,12 @@ export default function PurchasesPage() {
                 <option value="all">All payment methods</option>
                 {PAYMENT_FILTER_OPTIONS.map((method) => (
                   <option key={method.id} value={method.id}>{method.label}</option>
+                ))}
+              </select>
+              <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className={SELECT}>
+                <option value="all">All categories</option>
+                {categoryOptions.map(([id, name]) => (
+                  <option key={id} value={id}>{name}</option>
                 ))}
               </select>
               <DateInput value={from} onChange={setFrom} className={SELECT} aria-label="From date" />

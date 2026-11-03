@@ -322,7 +322,11 @@ const SAMPLE_FILTERS = {
   paymentMethod: 'cash',
   orderType: 'dine_in',
   search: 'abc',
+  // Tab-specific: each belongs to one tab only, so no other tab explains it.
+  expenseCategory: 'rent',
+  purchaseCategory: 4,
 };
+const TAB_ONLY_FILTERS = ['expenseCategory', 'purchaseCategory'];
 
 /** Records the SQL+params a builder emits, so we can tell if a filter bound. */
 function recorder() {
@@ -361,7 +365,8 @@ test('the tabs that cannot honour a filter say why', () => {
     for (const key of supported) {
       assert.ok(all.includes(key), `${tab} declares unknown filter ${key}`);
     }
-    if (supported.length < all.length) {
+    const shared = all.filter((key) => !TAB_ONLY_FILTERS.includes(key));
+    if (shared.some((key) => !supported.includes(key))) {
       assert.ok(
         FILTER_UNAVAILABLE_REASON[tab],
         `${tab} withholds filters and must explain why on the disabled control`

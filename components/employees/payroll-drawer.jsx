@@ -12,8 +12,8 @@ import DateInput from '@/components/ui/date-input.jsx';
 import { formatCalendarDate, formatCalendarMonth } from '@/lib/calendar-system.js';
 
 const money = (n) => `Rs ${Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
-const METHODS = ['cash', 'online', 'business_funding'];
-const methodLabel = (method) => ({ cash: 'Business Cash', online: 'Bank / Online', business_funding: 'Business Funding' }[method] || method);
+const METHODS = ['cash', 'online', 'business_funding', 'owner_pocket'];
+const methodLabel = (method) => ({ cash: 'Business Cash', online: 'Bank / Online', business_funding: 'Business Funding', owner_pocket: 'Owner Pocket (personal money)' }[method] || method);
 const today = () => nepalDateString();
 const currentPeriod = () => formatCalendarMonth();
 
@@ -213,7 +213,7 @@ export default function PayrollDrawer({
 
           {(canRecordSalary || canGiveAdvance) && (
             <div className="rounded-xl border border-gray-200 p-4">
-              <p className="mb-3 text-xs text-gray-600">Business Funding available: <strong>{money(details?.funding_available)}</strong>. Choose it directly, or use it to cover a Cash / Online shortfall when prompted.</p>
+              <p className="mb-3 text-xs text-gray-600">Business Funding available: <strong>{money(details?.funding_available)}</strong>. Choose it directly, or use it to cover a Cash / Online shortfall when prompted. Owner Pocket records personal money as owner equity without using business balances.</p>
               {canRecordSalary && canGiveAdvance && (
                 <div className="mb-4 grid grid-cols-2 rounded-lg bg-gray-100 p-1">
                   <ActionTab active={action === 'salary'} onClick={() => setAction('salary')}>Pay salary</ActionTab>

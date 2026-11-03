@@ -1645,7 +1645,7 @@ export default function AdminPos() {
           </div>
         </div>
 
-        <div className="flex-1 min-h-[160px] overflow-y-auto p-3 sm:p-4">
+        <div className="flex-1 min-h-[max(160px,32dvh)] overflow-y-auto overscroll-contain p-3 sm:p-4">
           {allLines.length === 0 ? (
             <div className="text-center text-slate-500 py-8">
               <ShoppingCart className="w-10 h-10 mx-auto mb-2 opacity-30" />
@@ -1764,7 +1764,7 @@ export default function AdminPos() {
         </div>
 
         {/* Shrinks and scrolls on short screens so Bill Payment / Bill Print stay reachable. */}
-        <div className="min-h-0 overflow-y-auto overscroll-contain border-t border-blue-200">
+        <div className="min-h-0 max-h-[45dvh] shrink-0 overflow-y-auto overscroll-contain border-t border-blue-200">
           <div className="p-3 sm:p-4 space-y-2.5 bg-gradient-to-r from-blue-50 to-white">
             <div className="space-y-1 text-sm bg-white rounded-xl p-2.5 border border-blue-100">
               <div className="flex justify-between">

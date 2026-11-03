@@ -46,7 +46,7 @@ export function SectionHeading({ icon: Icon, tone = 'gray', eyebrow, title, desc
 /** Every analytics section renders as its own white card — same language as the Reports tabs. */
 export function DashboardSection({ children, className = '' }) {
   return (
-    <section className={`min-w-0 overflow-hidden rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6 ${className}`}>
+    <section className={`dashboard-section min-w-0 overflow-hidden rounded-2xl border border-gray-200 bg-white p-4 sm:p-6 ${className}`}>
       {children}
     </section>
   );

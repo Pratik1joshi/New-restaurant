@@ -55,6 +55,7 @@ export async function GET(request) {
     }
     const data = await composeAnalytics(db, range, {}, {
       transactions: {
+        exportAll: searchParams.get('export') === 'analytics',
         page: Number(searchParams.get('transactionPage')) || 1,
         pageSize: Number(searchParams.get('transactionPageSize')) || 25,
       },

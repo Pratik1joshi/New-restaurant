@@ -1,6 +1,6 @@
 import {
   Calendar, ChefHat, ClipboardCheck, Contact, DollarSign, Layers, LayoutGrid,
-  ReceiptText, ShoppingCart, Truck, Undo2, Users, Wallet, Warehouse,
+  ReceiptText, ShoppingCart, Truck, Undo2, Users, Wallet, Warehouse, Wheat,
 } from 'lucide-react';
 
 export const REPORT_CATALOG = [
@@ -12,6 +12,7 @@ export const REPORT_CATALOG = [
   { id: 'orders', label: 'Orders Report', shortLabel: 'Orders', blurb: 'Order progress, kitchen cancellations and voided bill records.', icon: ClipboardCheck, chip: 'bg-cyan-50 text-cyan-600', accent: 'border-t-cyan-400' },
   { id: 'changes', label: 'Cancellations & Changes Report', shortLabel: 'Changes', blurb: 'Cancelled orders and items, voids, refunds, revisions and discounts.', icon: Undo2, chip: 'bg-red-50 text-red-600', accent: 'border-t-red-400' },
   { id: 'inventory', label: 'Inventory Report', shortLabel: 'Inventory', blurb: 'Current stock, movements, purchases and low-stock records.', icon: Warehouse, chip: 'bg-lime-50 text-lime-700', accent: 'border-t-lime-400' },
+  { id: 'ingredients', label: 'Ingredient Usage Report', shortLabel: 'Ingredients', blurb: 'Each ingredient’s opening stock, what was received, what sold dishes used, what was wasted and what is left. Click a row for the full story.', icon: Wheat, chip: 'bg-green-50 text-green-700', accent: 'border-t-green-500' },
   { id: 'employees', label: 'Employees Report', shortLabel: 'Employees', blurb: 'Employee service and settlement performance records.', icon: Users, chip: 'bg-fuchsia-50 text-fuchsia-600', accent: 'border-t-fuchsia-400' },
   { id: 'tables', label: 'Tables Report', shortLabel: 'Tables', blurb: 'Table performance and served-order records.', icon: LayoutGrid, chip: 'bg-sky-50 text-sky-600', accent: 'border-t-sky-400' },
   { id: 'reservations', label: 'Reservations Report', shortLabel: 'Reservations', blurb: 'Reservation, guest, status, table and waiting-time records.', icon: Calendar, chip: 'bg-violet-50 text-violet-600', accent: 'border-t-violet-400' },

@@ -40,7 +40,6 @@ const DECREASE_REASONS = [
   'Stock count correction',
   'Transferred to another outlet',
   'Returned to supplier',
-  'Staff meal',
   'Other',
 ];
 const INCREASE_REASONS = [
@@ -379,6 +378,13 @@ export default function StockAdjustmentModal({ item, suppliers = [], onClose, on
               <p className="text-xs text-gray-500">
                 This reason is stored on the stock movement, so the history explains itself later.
               </p>
+              {direction !== 'increase' && (
+                <p className="text-xs text-gray-500">
+                  Tasting, staff meals, owner use or free samples? Record them in{' '}
+                  <a href={typeof window !== 'undefined' && window.location.pathname.startsWith('/cashier') ? '/cashier/kitchen-use' : '/admin/kitchen-use'} className="font-medium text-gray-900 underline">Kitchen Use</a>{' '}
+                  so their cost is tracked.
+                </p>
+              )}
             </div>
           )}
 

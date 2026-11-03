@@ -29,6 +29,7 @@ export default function Combobox({
   className = '',
   autoFocus = false,
   portal = false,
+  'aria-label': ariaLabel,
 }) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
@@ -165,6 +166,7 @@ export default function Combobox({
         }}
         className={className || BASE}
         role="combobox"
+        aria-label={ariaLabel}
         aria-expanded={open}
         aria-controls={listId}
         aria-autocomplete="list"

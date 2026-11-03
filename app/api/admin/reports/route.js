@@ -47,6 +47,8 @@ export async function GET(request) {
       paymentMethod: searchParams.get('paymentMethod') || null,
       orderType: searchParams.get('orderType') || null,
       search: (searchParams.get('search') || '').trim() || null,
+      expenseCategory: (searchParams.get('expenseCategory') || '').trim() || null,
+      purchaseCategory: Number(searchParams.get('purchaseCategory')) || null,
       // export=1 lifts the detail-table cap so a download is the complete set,
       // not the first page the screen happened to show.
       /*

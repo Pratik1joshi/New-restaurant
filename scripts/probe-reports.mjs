@@ -181,6 +181,7 @@ await probe('FILTERS reach the query on every tab', async () => {
   const sample = {
     businessDayId: 7, employeeId: 3, categoryId: 2, foodGroup: 'beverage',
     paymentMethod: 'cash', orderType: 'dine_in', search: 'abc',
+    expenseCategory: 'rent', purchaseCategory: 4,
   };
   const filterRange = resolvePeriodRange('last7');
   const broken = [];

@@ -30,6 +30,7 @@ export async function GET(request) {
       from: q.get('from'),
       to: q.get('to'),
       paymentMethod: q.get('payment_method'),
+      categoryId: q.get('category_id'),
     };
 
     const { rows, pagination, summary } = await listPurchases(db, { ...readListParams(q), ...filters });

@@ -8,7 +8,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import AdminLayout from '@/components/admin/admin-layout';
-import { ExternalLink, Pencil, Plus } from 'lucide-react';
+import WorkspaceHeader, { RecipeWorkspaceNav } from '@/components/admin/workspace-header';
+import { BookOpen, ExternalLink, Pencil, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/components/ui/toast';
 import { friendlyFromError } from '@/lib/friendly-message';
@@ -139,19 +140,11 @@ export default function RecipesPage() {
 
   return (
     <AdminLayout>
-      <header className="border-b border-gray-200 bg-white px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
-        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">Recipes</h1>
-            <p className="mt-1 text-sm text-gray-500 sm:text-base">
-              What each dish costs to make, and which ones are not yet wired to deduct stock.
-            </p>
-          </div>
-          <button type="button" onClick={() => setPanel({ create: true })} className="inline-flex items-center gap-1.5 self-start rounded-xl bg-gray-900 px-3.5 py-2.5 text-sm font-semibold text-white hover:bg-gray-800">
-            <Plus className="h-4 w-4" /> New recipe
-          </button>
-        </div>
-      </header>
+      <WorkspaceHeader eyebrow="Recipe studio" title="Recipe library" icon={BookOpen}
+        description="Build recipes, work out ingredient costs, and refine preparation before recording a real trial."
+        actions={<button type="button" onClick={() => setPanel({ create: true })} className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-gray-900 px-4 text-sm font-semibold text-white hover:bg-gray-800"><Plus className="h-4 w-4" />New recipe</button>}>
+        <RecipeWorkspaceNav active="recipes" />
+      </WorkspaceHeader>
 
       <div className="space-y-5 bg-gray-50 p-4 sm:p-6 lg:p-8">
         <KpiCards

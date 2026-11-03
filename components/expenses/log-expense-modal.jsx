@@ -126,8 +126,8 @@ export default function LogExpenseModal({ editingExpense, initialCategory, payro
     if (staffPayment && !employeeId) {
       addToast(friendlyMessage('validation', { description: 'Select the staff member receiving this payment.' })); return;
     }
-    if (staffPayment && !['cash', 'online', 'business_funding'].includes(form.payment_method)) {
-      addToast(friendlyMessage('validation', { description: 'Choose Cash, Online or Business Funding for staff payments.' })); return;
+    if (staffPayment && !['cash', 'online', 'business_funding', 'owner_pocket'].includes(form.payment_method)) {
+      addToast(friendlyMessage('validation', { description: 'Choose Cash, Online, Business Funding or Owner Pocket for staff payments.' })); return;
     }
     setSaving(true);
     try {
@@ -220,11 +220,11 @@ export default function LogExpenseModal({ editingExpense, initialCategory, payro
             </AdminField>
             <AdminField label="Payment Method">
               <select disabled={closedCorrection} className={adminInputClass} value={form.payment_method} onChange={(e) => setForm((f) => ({ ...f, payment_method: e.target.value }))}>
-                {PAYMENT_METHODS.filter((m) => !staffPayment || ['cash', 'online', 'business_funding'].includes(m.value)).map((m) => (
+                {PAYMENT_METHODS.filter((m) => !staffPayment || ['cash', 'online', 'business_funding', 'owner_pocket'].includes(m.value)).map((m) => (
                   <option key={m.value} value={m.value}>{m.label}</option>
                 ))}
               </select>
-              {!staffPayment && <p className="mt-1.5 text-xs text-gray-500">Owner Pocket records owner equity directly; it does not create fake Cash In.</p>}
+              <p className="mt-1.5 text-xs text-gray-500">Owner Pocket records personal money as owner equity without using business cash, bank or funding balances.</p>
             </AdminField>
           </div>
 

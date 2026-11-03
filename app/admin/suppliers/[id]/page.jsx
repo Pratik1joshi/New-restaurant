@@ -17,6 +17,7 @@ function suppliersPath() {
 }
 
 function paymentMethodLabel(method) {
+  if (method === 'owner_pocket') return 'Owner Pocket';
   if (method === 'business_funding') return 'Business Funding';
   if (method === 'cash') return 'Cash';
   if (method === 'online') return 'Online';

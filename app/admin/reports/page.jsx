@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import AdminLayout from '@/components/admin/admin-layout';
+import WorkspaceHeader from '@/components/admin/workspace-header';
 import {
   Calendar, RotateCcw, Search, GitCompareArrows,
 } from 'lucide-react';
@@ -13,6 +14,7 @@ import DateInput from '@/components/ui/date-input.jsx';
 import BillInvoiceModal from '@/components/admin/bill-invoice-modal.jsx';
 import PurchaseDrawer from '@/components/purchases/purchase-drawer';
 import ExpenseDrawer from '@/components/expenses/expense-drawer.jsx';
+import IngredientDrawer from '@/components/reports/ingredient-drawer.jsx';
 import { formatCalendarDate, formatCalendarRangeLabel } from '@/lib/calendar-system.js';
 import { useCalendarSystem } from '@/lib/calendar-context.jsx';
 import { REPORT_CATALOG as TABS, REPORT_PERIODS as PERIODS } from '@/components/admin/report-catalog.jsx';
@@ -31,8 +33,8 @@ const ALL_FILTERS = ['businessDayId', 'employeeId', 'paymentMethod', 'orderType'
 const TAB_FILTERS = {
   sales: ALL_FILTERS,
   finance: ALL_FILTERS,
-  expenses: ALL_FILTERS,
-  purchases: ['businessDayId', 'employeeId', 'paymentMethod', 'search'],
+  expenses: [...ALL_FILTERS, 'expenseCategory'],
+  purchases: ['businessDayId', 'employeeId', 'paymentMethod', 'search', 'purchaseCategory'],
   orders: ALL_FILTERS,
   menu: ALL_FILTERS,
   categories: ALL_FILTERS,
@@ -40,6 +42,7 @@ const TAB_FILTERS = {
   employees: ALL_FILTERS,
   tables: ALL_FILTERS,
   inventory: ['businessDayId', 'employeeId', 'search'],
+  ingredients: ['search', 'purchaseCategory'],
   reservations: ['businessDayId', 'search'],
   suppliers: ['businessDayId', 'paymentMethod', 'search'],
   changes: ['businessDayId'],
@@ -48,6 +51,7 @@ const TAB_FILTERS = {
 const EMPTY_FILTERS = {
   businessDayId: '', employeeId: '',
   paymentMethod: '', orderType: '', search: '',
+  expenseCategory: '', purchaseCategory: '',
 };
 
 const controlClass = 'h-10 rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-700';
@@ -65,6 +69,7 @@ const TABLE_COLUMNS = {
   'categories:category-summary': ['category', 'master_category', 'quantity', 'revenue', 'profit', 'share'],
   'categories:master-category-summary': ['master_category', 'quantity', 'revenue', 'profit', 'share'],
   'inventory:inventory': ['item_name', 'quantity', 'unit', 'min_level', 'value', 'stock_status'],
+  'ingredients:ingredients': ['item_name', 'unit', 'opening', 'received', 'used', 'wastage', 'kitchen_use', 'closing', 'usage_basis'],
   'customers:detail': ['name', 'phone', 'is_vip', 'orders', 'spending', 'last_visit'],
   'tables:table-performance': ['table_number', 'section', 'current_status', 'orders', 'revenue', 'avg_minutes'],
   'tables:served-orders': ['created_at', 'paid_at', 'table_number', 'order_number', 'sitting_minutes', 'grand_total'],
@@ -75,7 +80,7 @@ const TABLE_COLUMNS = {
   'changes:voids-refunds': ['created_at', 'type', 'bill_number', 'original_amount', 'amount', 'reason'],
   'changes:bill-revisions': ['created_at', 'bill_number', 'status', 'original_total', 'new_total', 'reason'],
   'changes:discounted-bills': ['created_at', 'bill_number', 'order_type', 'gross', 'discount', 'net_items'],
-  'purchases:purchases': ['invoice_date', 'recorded_at', 'invoice_number', 'supplier', 'status', 'payment_method', 'total'],
+  'purchases:purchases': ['invoice_date', 'recorded_at', 'invoice_number', 'supplier', 'item_names', 'status', 'payment_method', 'total'],
 };
 
 function tabFromSearchParams(searchParams) {
@@ -106,6 +111,7 @@ function ReportsPageInner() {
   const [invoiceBillId, setInvoiceBillId] = useState(null);
   const [purchaseDrawerId, setPurchaseDrawerId] = useState(null);
   const [expenseDrawer, setExpenseDrawer] = useState(null);
+  const [ingredientDrawerId, setIngredientDrawerId] = useState(null);
   const [tablePages, setTablePages] = useState({});
   const [tablePageSizes, setTablePageSizes] = useState({});
 
@@ -256,19 +262,8 @@ function ReportsPageInner() {
 
   return (
     <AdminLayout>
-      <header className={`border-b border-gray-200 border-t-4 bg-white px-4 py-5 sm:px-6 lg:px-8 ${activeTab.accent}`}>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div className="flex items-start gap-3">
-            <span className={`mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${activeTab.chip}`}>
-              <activeTab.icon className="h-5 w-5" />
-            </span>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-950 sm:text-3xl">{activeTab.label}</h1>
-              <p className="mt-1 text-sm text-gray-500">{activeTab.blurb}</p>
-            </div>
-          </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
-            <p className="flex items-center gap-1.5 text-xs font-medium text-gray-500">
+      <WorkspaceHeader eyebrow="Reports & records" title={activeTab.label} description={activeTab.blurb}
+        icon={activeTab.icon} actions={<>            <p className="flex items-center gap-1.5 text-xs font-medium text-gray-500">
               <Calendar className="h-3.5 w-3.5" />
               {currentData?.range ? formatCalendarRangeLabel(currentData.range) : 'Select the reporting period below'}
             </p>
@@ -279,9 +274,7 @@ function ReportsPageInner() {
               <GitCompareArrows className="h-4 w-4" />
               Compare report
             </Link>
-          </div>
-        </div>
-      </header>
+</>} />
 
       <main className="min-h-screen space-y-5 bg-gray-50 p-4 sm:p-6 lg:p-8">
         {/* Period controls must stay visible even when the fetch race leaves no rows yet. */}
@@ -313,6 +306,7 @@ function ReportsPageInner() {
                 onPageSizeChange={(pageSize) => setTablePageSize(table.id, pageSize)}
                 onExportAll={() => fetchFullTable(table.id)}
                 csvName={`${tab}-${table.id}-${currentData.range?.start || 'records'}`}
+                exportRange={currentData.range}
                 visibleColumnKeys={TABLE_COLUMNS[`${tab}:${table.id}`]}
                 onBillClick={(billId) => setInvoiceBillId(billId)}
                 onEntityClick={(link) => {
@@ -321,7 +315,9 @@ function ReportsPageInner() {
                   if (link.type === 'expense') { openExpenseDrawer(link.id).catch((drawerError) => setError(drawerError.message)); return true; }
                   return false;
                 }}
-                onRowClick={tab === 'purchases'
+                onRowClick={tab === 'ingredients'
+                  ? (row) => setIngredientDrawerId(row._record_id)
+                  : tab === 'purchases'
                   ? (row) => setPurchaseDrawerId(row._record_id || row.id)
                   : (tab === 'expenses' || (tab === 'finance' && table.id === 'ledger'))
                     ? (row) => openExpenseDrawer(row._record_id || row.id, row).catch((drawerError) => setError(drawerError.message))
@@ -339,6 +335,14 @@ function ReportsPageInner() {
           purchaseId={purchaseDrawerId}
           onClose={() => setPurchaseDrawerId(null)}
           onChanged={load}
+        />
+      )}
+      {ingredientDrawerId && currentData?.range && (
+        <IngredientDrawer
+          ingredientId={ingredientDrawerId}
+          range={currentData.range}
+          basePath={pathname?.startsWith('/cashier') ? '/cashier' : '/admin'}
+          onClose={() => setIngredientDrawerId(null)}
         />
       )}
       {expenseDrawer && <ExpenseDrawer expense={expenseDrawer} category={String(expenseDrawer.category || 'Other').replace(/_/g, ' ')} onClose={() => setExpenseDrawer(null)} />}
@@ -374,7 +378,7 @@ function ReportFilters({
     <div>
       <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Period</p>
       <div className="flex flex-wrap gap-2">
-        {PERIODS.map((item) => <button key={item.id} type="button" onClick={() => setPeriod(item.id)} className={`rounded-lg px-3 py-2 text-sm font-medium ${period === item.id ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>{item.label}</button>)}
+        {PERIODS.map((item) => <button key={item.id} type="button" onClick={() => setPeriod(item.id)} aria-pressed={period === item.id} className={`rounded-lg px-3 py-2 text-sm font-medium ${period === item.id ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>{item.label}</button>)}
         {period === 'custom' && <div className="flex flex-wrap items-center gap-2">
           <DateInput value={custom.start} onChange={(value) => setCustom({ ...custom, start: value })} className={controlClass} />
           <span className="text-sm text-gray-400">to</span>
@@ -403,6 +407,14 @@ function ReportFilters({
       {enabled('orderType') && <select value={filters.orderType} onChange={(event) => setFilter('orderType', event.target.value)} className={controlClass}>
         <option value="">All order types</option>
         {(options?.orderTypes || []).map((type) => <option key={type} value={type}>{orderTypeLabel(type)}</option>)}
+      </select>}
+      {enabled('expenseCategory') && <select value={filters.expenseCategory} onChange={(event) => setFilter('expenseCategory', event.target.value)} className={controlClass}>
+        <option value="">All categories</option>
+        {(options?.expenseCategories || []).map((category) => <option key={category} value={category}>{category.replace(/_/g, ' ')}</option>)}
+      </select>}
+      {enabled('purchaseCategory') && <select value={filters.purchaseCategory} onChange={(event) => setFilter('purchaseCategory', event.target.value)} className={controlClass}>
+        <option value="">All categories</option>
+        {(options?.purchaseCategories || []).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
       </select>}
       {enabled('search') && <form onSubmit={(event) => { event.preventDefault(); setFilter('search', searchDraft.trim()); }} className="relative min-w-[210px] flex-1">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />

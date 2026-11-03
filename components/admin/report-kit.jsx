@@ -24,7 +24,7 @@ import {
 import { formatCurrency } from '@/lib/currency';
 import { formatNepalDateTime, formatNepalDisplay } from '@/lib/report-dates';
 import { formatCalendarText } from '@/lib/calendar-system.js';
-import { toCsv } from '@/lib/csv';
+import { downloadReport } from '@/lib/report-export.js';
 import { financialToneClass } from '@/lib/financial-tone';
 import { paymentBucket } from '@/lib/report-scope.js';
 import PaginationControls from '@/components/ui/pagination-controls';
@@ -189,14 +189,14 @@ export function KpiCards({ kpis, groups }) {
 }
 
 function KpiGrid({ kpis }) {
-  const cols = kpis.length >= 5 ? 'xl:grid-cols-5' : 'lg:grid-cols-4';
+  const cols = kpis.length === 1 ? 'grid-cols-1' : kpis.length === 2 ? 'grid-cols-1 sm:grid-cols-2' : kpis.length === 3 ? 'grid-cols-1 sm:grid-cols-3' : kpis.length >= 5 ? 'grid-cols-2 xl:grid-cols-5' : 'grid-cols-2 lg:grid-cols-4';
   return (
-    <div className={`grid grid-cols-2 gap-3 sm:gap-5 ${cols}`}>
+    <div className={`grid gap-3 sm:gap-4 ${cols}`}>
       {kpis.map((kpi) => (
         <div
           key={kpi.key}
-          className={`rounded-2xl border p-4 shadow-sm sm:p-6 ${
-            kpi.highlight ? 'border-emerald-200 bg-emerald-50/50 ring-1 ring-emerald-100' : 'border-gray-200 bg-white'
+          className={`metric-card min-w-0 rounded-2xl border p-4 sm:p-5 ${
+            kpi.highlight ? 'border-teal-200 bg-teal-50/60' : 'border-gray-200 bg-white'
           }`}
         >
           <p className="text-xs font-medium text-gray-500 sm:text-sm">
@@ -211,10 +211,10 @@ function KpiGrid({ kpis }) {
               kpi.label
             )}
           </p>
-          <h3 className={`mt-2 truncate text-xl font-bold tabular-nums sm:text-2xl ${kpi.format === 'currency' ? financialToneClass(kpi) : 'text-gray-900'}`} title={String(kpi.value ?? '')}>
+          <h3 className={`mt-3 break-words text-xl font-semibold tracking-tight tabular-nums sm:text-2xl ${kpi.format === 'currency' ? financialToneClass(kpi) : 'text-gray-900'}`} title={String(kpi.value ?? '')}>
             {formatValue(kpi.value, kpi.format)}
           </h3>
-          {kpi.sub && <p className="mt-1 truncate text-xs text-gray-400">{kpi.sub}</p>}
+          {kpi.sub && <p className="mt-2 text-xs leading-relaxed text-gray-500">{kpi.sub}</p>}
           {kpi.change != null && (
             <p className={`mt-1 inline-flex items-center gap-1 text-xs font-medium ${kpi.change >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
               {kpi.change >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
@@ -476,9 +476,11 @@ function Badge({ value }) {
 export function DataTable({
   title, columns, rows, empty, csvName, onExportAll, toolbar, detailContext,
   visibleColumnKeys, onRowClick, onBillClick, onEntityClick, pagination: serverPagination, onPageChange, onPageSizeChange,
-  pageLoading = false, tableTotals, paymentTotals: serverPaymentTotals, accentClass,
+  pageLoading = false, tableTotals, paymentTotals: serverPaymentTotals, accentClass, exportRange,
 }) {
   const [search, setSearch] = useState('');
+  const [exportError, setExportError] = useState('');
+  const [exporting, setExporting] = useState(false);
   const [sort, setSort] = useState({ key: null, dir: 'desc' });
   const [clientPage, setClientPage] = useState(1);
   const [clientPageSize, setClientPageSize] = useState(DEFAULT_PAGE_SIZE);
@@ -486,12 +488,31 @@ export function DataTable({
   const [detailData, setDetailData] = useState(null);
   const [detailError, setDetailError] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [fullTable, setFullTable] = useState({ for: null, rows: null });
+
+  // Searching a server-paged table must cover every page, not just the one on
+  // screen: load the whole table once and search + page it here instead.
+  const needsAllRows = Boolean(
+    serverPagination && onExportAll && search.trim()
+    && Number(serverPagination.total ?? rows.length) > rows.length
+  );
+  const allRows = fullTable.for === serverPagination ? fullTable.rows : null;
+  useEffect(() => {
+    if (!needsAllRows || allRows) return undefined;
+    let cancelled = false;
+    onExportAll()
+      .then((list) => { if (!cancelled) setFullTable({ for: serverPagination, rows: list || [] }); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [needsAllRows, allRows, serverPagination, onExportAll]);
+  const searchingAllRows = needsAllRows && Boolean(allRows);
 
   const visible = useMemo(() => {
     const needle = search.trim().toLowerCase();
+    const source = searchingAllRows ? allRows : rows;
     let out = needle
-      ? rows.filter((row) => columns.some((c) => String(row[c.key] ?? '').toLowerCase().includes(needle)))
-      : rows.slice();
+      ? source.filter((row) => columns.some((c) => String(row[c.key] ?? '').toLowerCase().includes(needle)))
+      : source.slice();
     if (sort.key) {
       const col = columns.find((c) => c.key === sort.key);
       const numeric = ['currency', 'number', 'percent'].includes(col?.type);
@@ -507,9 +528,9 @@ export function DataTable({
       });
     }
     return out;
-  }, [rows, columns, search, sort]);
+  }, [rows, allRows, searchingAllRows, columns, search, sort]);
 
-  const usesServerPaging = Boolean(serverPagination);
+  const usesServerPaging = Boolean(serverPagination) && !searchingAllRows;
   const activePageSize = usesServerPaging
     ? Number(serverPagination.page_size ?? serverPagination.pageSize ?? DEFAULT_PAGE_SIZE)
     : clientPageSize;
@@ -693,63 +714,70 @@ export function DataTable({
    * A download is the complete table, never the truncated view: when the server
    * capped this table, re-ask for it uncapped before writing the file.
    */
-  const exportCsv = async () => {
-    let source = visible;
-    const needsFullExport = onExportAll && (usesServerPaging ? totalRows > rows.length : visible.length > pagedVisible.length);
-    if (needsFullExport) {
-      const full = await onExportAll();
-      if (full?.length) {
-        const needle = search.trim().toLowerCase();
-        source = needle
-          ? full.filter((row) => columns.some((c) => String(row[c.key] ?? '').toLowerCase().includes(needle)))
-          : full;
+  const exportCsv = async (format = 'csv') => {
+    if (exporting) return;
+    setExporting(true);
+    setExportError('');
+    try {
+      let source = visible;
+      const needsFullExport = onExportAll && (usesServerPaging ? totalRows > rows.length : visible.length > pagedVisible.length);
+      if (needsFullExport) {
+        const full = await onExportAll();
+        if (Array.isArray(full)) {
+          const needle = search.trim().toLowerCase();
+          source = needle
+            ? full.filter((row) => columns.some((c) => String(row[c.key] ?? '').toLowerCase().includes(needle)))
+            : full;
+        }
       }
-    }
-    const headers = columns.map((c) => c.label);
-    const exportValue = (column, value) => {
-      if (value == null || value === '') return '';
-      if (column.type === 'datetime') return formatNepalDateTime(value);
-      if (column.type === 'date') return formatNepalDisplay(String(value).slice(0, 10));
-      if (/(^|_)(date|day)$|\bdate\b|\bday\b/i.test(`${column.key || ''} ${column.label || ''}`)) return formatNepalDisplay(String(value).slice(0, 10));
-      if (['currency', 'percent', 'decimal', 'minutes', 'number'].includes(column.type)) {
-        return formatValue(value, column.type);
+      const headers = columns.map((c) => c.label);
+      const exportValue = (column, value) => {
+        if (value == null || value === '') return '';
+        if (column.type === 'datetime') return formatNepalDateTime(value);
+        if (column.type === 'date') return formatNepalDisplay(String(value).slice(0, 10));
+        if (/(^|_)(date|day)$|\bdate\b|\bday\b/i.test(`${column.key || ''} ${column.label || ''}`)) return formatNepalDisplay(String(value).slice(0, 10));
+        if (['currency', 'percent', 'decimal', 'minutes', 'number'].includes(column.type)) {
+          return Number.isFinite(Number(value)) ? Number(value) : value;
+        }
+        return value;
+      };
+      const csvRows = source.map((row) =>
+        Object.fromEntries(columns.map((c) => [c.label, exportValue(c, row[c.key])]))
+      );
+      if (source.length && totalColumns.length) {
+        const exportTotals = !search.trim() && tableTotals ? tableTotals : totalsFor(source);
+        csvRows.push(Object.fromEntries(columns.map((column, index) => [
+          column.label,
+          index === 0 ? 'TOTAL' : exportValue(column, exportTotals[column.key]),
+        ])));
+        if (showPaymentSplit && paymentSplit) {
+          const breakdown = [
+            ['Cash', paymentSplit.cash],
+            ['Online', paymentSplit.digital],
+            ['Funding', paymentSplit.funding],
+            ['Credit', paymentSplit.credit],
+          ];
+          csvRows.push(Object.fromEntries(headers.map((header) => [header, ''])));
+          breakdown.forEach(([method, amount], rowIndex) => {
+            csvRows.push(Object.fromEntries(columns.map((column, index) => [
+              column.label,
+              index === 0 ? (rowIndex === 0 ? 'PAYMENT BREAKDOWN' : '')
+                : index === 1 ? (columns.length > 2 ? method : `${method}: ${formatValue(amount, 'currency')}`)
+                  : index === 2 ? amount : '',
+            ])));
+          });
+        }
       }
-      return value;
-    };
-    const csvRows = source.map((row) =>
-      Object.fromEntries(columns.map((c) => [c.label, exportValue(c, row[c.key])]))
-    );
-    if (source.length && totalColumns.length) {
-      const exportTotals = totalsFor(source);
-      csvRows.push(Object.fromEntries(columns.map((column, index) => [
-        column.label,
-        index === 0 ? 'TOTAL' : exportValue(column, exportTotals[column.key]),
-      ])));
-      if (showPaymentSplit && paymentSplit) {
-        const breakdown = [
-          ['Cash', paymentSplit.cash],
-          ['Online', paymentSplit.digital],
-          ['Funding', paymentSplit.funding],
-          ['Credit', paymentSplit.credit],
-        ];
-        csvRows.push(Object.fromEntries(headers.map((header) => [header, ''])));
-        breakdown.forEach(([method, amount], rowIndex) => {
-          csvRows.push(Object.fromEntries(columns.map((column, index) => [
-            column.label,
-            index === 0 ? (rowIndex === 0 ? 'PAYMENT BREAKDOWN' : '')
-              : index === 1 ? (columns.length > 2 ? method : `${method}: ${formatValue(amount, 'currency')}`)
-                : index === 2 ? formatValue(amount, 'currency') : '',
-          ])));
-        });
-      }
-    }
-    const blob = new Blob([toCsv(headers, csvRows)], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${csvName || 'report'}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+      const metadata = [['Currency', 'NPR'], ['Generated (NPT)', formatNepalDateTime(new Date())]];
+      const range = exportRange || detailContext?.range;
+      if (range?.start) metadata.push(['From', range.start]);
+      if (range?.end) metadata.push(['To', range.end]);
+      if (search.trim()) metadata.push(['Search', search.trim()]);
+      downloadReport(csvName || 'report', format, title || 'Report', [{ title: title || 'Records', columns: columns.map((c) => ({ ...c, key: c.label })), rows: csvRows }], metadata);
+    } catch (error) {
+      setExportError(error.message || 'Could not export the complete report.');
+    } finally { setExporting(false); }
+
   };
 
   return (
@@ -780,15 +808,17 @@ export function DataTable({
           </div>
           <button
             type="button"
-            onClick={exportCsv}
-            disabled={!visible.length}
+            onClick={() => exportCsv('csv')}
+            disabled={!visible.length || exporting || pageLoading}
             className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-gray-300 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40"
           >
             <Download className="h-4 w-4" /> CSV
           </button>
+          <button type="button" onClick={() => exportCsv('excel')} disabled={!visible.length || exporting || pageLoading} className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-gray-300 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40"><Download className="h-4 w-4" />{exporting ? 'Exporting…' : 'Excel'}</button>
         </div>
       </div>
 
+      {exportError && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{exportError}</p>}
       {/* A capped list must never read as a complete one. */}
       {!pagedVisible.length ? (
         <p className="py-12 text-center text-sm text-gray-500">
@@ -826,7 +856,7 @@ export function DataTable({
                   aria-label={`View details for row ${i + 1} in ${title}`}
                 >
                   {tableColumns.map((c) => (
-                    <td key={c.key} className={`whitespace-nowrap px-4 py-3.5 ${c.align === 'right' ? `text-right tabular-nums font-medium ${c.type === 'currency' ? financialToneClass({ label: c.label, value: row[c.key], tone: c.tone }) : 'text-gray-900'}` : 'text-gray-600'}`}>
+                    <td key={c.key} className={`${c.key === 'item_names' ? 'min-w-64 max-w-md whitespace-normal' : 'whitespace-nowrap'} px-4 py-3.5 ${c.align === 'right' ? `text-right tabular-nums font-medium ${c.type === 'currency' ? financialToneClass({ label: c.label, value: row[c.key], tone: c.tone }) : 'text-gray-900'}` : 'text-gray-600'}`}>
                       {c.type === 'badge' || c.type === 'status'
                         ? <Badge value={row[c.key]} />
                         : formatValue(row[c.key], c.type)}

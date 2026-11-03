@@ -65,7 +65,8 @@ export default function SummaryReportPage(){
         <div className="grid gap-5 lg:grid-cols-2 xl:grid-cols-3">
           <Section title="Total Purchase" rows={[line('Business Cash',d.purchases.cash),line('Business Bank / Online',d.purchases.bank),line('Owner / Business Funding',d.purchases.funding),line('Supplier Credit',d.purchases.credit),line('Total Purchase',d.purchases.total)]}/>
           <Section title="Total Expense" rows={[line('Business Cash',d.expenses.cash),line('Business Bank / Online',d.expenses.bank),line('Owner / Business Funding',d.expenses.funding),line('Credit Expense',d.expenses.credit),line('Total Expense',d.expenses.total)]}/>
-          <Section title="Salary Payments & Adjustments" rows={[line('Business Cash',d.salary.cash),line('Bank / Online',d.salary.bank),line('Business Funding',d.salary.funding||0),line('Advance deductions',d.salary.advance_deductions),line('Advance deductions waived',d.salary.waived||0),line('Gross salary expense',d.salary.total)]}/>
+          <Section title="Salary Payments & Adjustments" rows={[line('Business Cash',d.salary.cash),line('Bank / Online',d.salary.bank),line('Owner / Business Funding',d.salary.funding||0),line('Advance deductions',d.salary.advance_deductions),line('Advance deductions waived',d.salary.waived||0),line('Gross salary expense',d.salary.total)]}/>
+          <Section title="Kitchen Use" rows={[line('Chef tasting',d.kitchen_use?.chef_tasting||0),line('Recipe testing',d.kitchen_use?.recipe_testing||0),line('Staff meals',d.kitchen_use?.staff_meal||0),line('Guest samples',d.kitchen_use?.guest_sample||0),line('Owner / family use',d.kitchen_use?.owner_use||0),line('Total kitchen use',d.kitchen_use?.total||0)]}/>
         </div>
         </ReportGroup>
         <ReportGroup title="Cash Position" note="Where the money sits now, and how the drawer reconciles." tint="amber">
@@ -83,7 +84,7 @@ export default function SummaryReportPage(){
         </ReportGroup>
         <ReportGroup title="Profitability" note="What is left after cost of food and running the place." tint="indigo">
         <div className="grid gap-5 lg:grid-cols-2 xl:grid-cols-3">
-          <Section highlight tint="blue" title="Profit & Loss" note="Refunds reduce revenue. Refunded food remains in food cost because a refund does not restore consumed stock; a void does." rows={[line('Net Revenue after Refunds / Voids',d.profit.revenue,'',d.profit.revenue<0?'negative':'positive'),line('Estimated Food Cost',d.profit.food_cost,'-'),line('Estimated Gross Profit',d.profit.gross),line('Operating Expenses & Salary',d.profit.operating,'-'),line('Estimated Net Profit',d.profit.net,d.profit.net>=0?'+':'')]}/>
+          <Section highlight tint="blue" title="Profit & Loss" note="Refunds reduce revenue. Refunded food remains in food cost because a refund does not restore consumed stock; a void does." rows={[line('Net Revenue after Refunds / Voids',d.profit.revenue,'',d.profit.revenue<0?'negative':'positive'),line('Estimated Food Cost',d.profit.food_cost,'-'),line('Estimated Gross Profit',d.profit.gross),line('Operating Expenses & Salary',d.profit.operating,'-'),line('Kitchen Use (owner use excluded)',d.profit.kitchen_use||0,'-'),line('Estimated Net Profit',d.profit.net,d.profit.net>=0?'+':'')]}/>
           <Section title="Sales - Expense" note="Net revenue minus operating expenses & salary, without subtracting food cost." rows={[line('Net Revenue',d.profit.revenue,'',d.profit.revenue<0?'negative':'positive'),line('Operating Expenses & Salary',d.profit.operating,'-'),line('Result',d.profit.revenue-d.profit.operating,'',(d.profit.revenue-d.profit.operating)<0?'negative':'positive')]}/>
         </div>
         </ReportGroup>

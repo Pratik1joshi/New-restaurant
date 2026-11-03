@@ -150,6 +150,58 @@
   padding-bottom: max(1rem, env(safe-area-inset-bottom));
 }
 
+/* Shared management surfaces: consistent reading rhythm across every module. */
+.admin-page-content {
+  --workspace-accent: #0f766e;
+  background: #f8fafb;
+}
+
+.admin-page-content h1 {
+  letter-spacing: -0.035em;
+  line-height: 1.2;
+}
+
+.admin-page-content :where(input, select, textarea):focus-visible {
+  outline: 2px solid var(--workspace-accent);
+  outline-offset: 2px;
+}
+
+.admin-page-content :where(button, a):focus-visible {
+  outline: 2px solid var(--workspace-accent);
+  outline-offset: 3px;
+}
+
+.admin-page-content :where(button):disabled {
+  cursor: not-allowed;
+}
+
+.admin-page-content :where(table) {
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-page-content :where(thead th) {
+  font-size: 0.6875rem;
+  letter-spacing: 0.045em;
+}
+
+.admin-page-content :where(tbody tr):focus-within {
+  background-color: #f0fdfa;
+}
+
+.workspace-header {
+  background-image: linear-gradient(110deg, #f0fdfa55, transparent 55%);
+}
+
+.metric-card,
+.dashboard-section {
+  box-shadow: 0 2px 6px #0f172a03;
+}
+
+@media print {
+  .workspace-header { background-image: none; }
+  .metric-card, .dashboard-section { box-shadow: none; }
+}
+
 /* Roomier admin modals / legacy inline forms */
 .admin-form-shell {
   width: 100%;

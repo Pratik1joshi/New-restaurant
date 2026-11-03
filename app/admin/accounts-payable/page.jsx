@@ -497,8 +497,10 @@ export default function AccountsPayablePage() {
                   <option value="cash">Cash</option>
                   <option value="online">Online</option>
                   <option value="business_funding">Business Funding</option>
+                  <option value="owner_pocket">Owner Pocket (personal money)</option>
                 </select>
               </Field>
+              {form.method === 'owner_pocket' && <p className="text-xs text-gray-500">Paid personally by the owner. Increases owner equity without using business cash, bank or funding balances.</p>}
               {form.method === 'business_funding' && (
                 <p className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-800">
                   Available Business Funding: {money(overview.business_funding_available)}

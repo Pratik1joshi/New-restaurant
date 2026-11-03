@@ -4,15 +4,16 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } fr
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import {
   Users, Package, FileText, Settings, DollarSign, ShoppingCart,
-  LayoutDashboard, Warehouse, LayoutGrid, FolderOpen, Menu, X, Inbox, ChefHat, Wallet, Truck, Trash,
+  LayoutDashboard, Warehouse, Wheat, Soup, LayoutGrid, FolderOpen, Menu, X, Search, Inbox, ChefHat, Wallet, Truck, Trash,
   Building2, ChevronDown, Ruler, Layers, TrendingUp, Activity,
   BookOpen, ScrollText, Coins, Landmark, CreditCard, ArrowRightLeft, Undo2, Receipt, Gauge, ClipboardCheck,
-  BarChart3, Globe, ReceiptText, CalendarClock, BellRing, Calendar, History,
+  BarChart3, Download, Globe, ReceiptText, CalendarClock, BellRing, Calendar, History,
   PiggyBank, ShieldCheck, WalletCards, Bike, Contact, CalendarHeart, CalendarCheck2, Printer, BadgePercent, MessageSquareHeart, Banknote, Wine
 } from 'lucide-react';
 import LogoutButton from '@/components/ui/logout-button';
 import CashCountGate from '@/components/cash-count/cash-count-gate';
 import { isNavHidden } from '@/lib/deployment';
+import { downloadElementCsv } from '@/lib/dom-csv';
 import { permissionForStaffPath } from '@/lib/staff-access-policy';
 
 function readPanelAuthSync() {
@@ -93,9 +94,20 @@ const GROUP_TINTS = {
   Reports: 'indigo',
 };
 
-export default function AdminLayout({ children }) {
+// Report screens whose own tables have no CSV button: the layout offers one
+// that exports what the page shows.
+const PAGE_CSV_ROUTES = [
+  'summary-report', 'cash-book', 'bank-book', 'general-ledger', 'financial-reports', 'category-sales',
+  'previous-day-activity', 'employee-performance', 'kitchen-analytics', 'analytics', 'finance-dashboard',
+  'cash-counts', 'cash-drawer', 'accounts-payable', 'accounts-receivable', 'settlements', 'cancellations',
+  'business-days', 'inventory/dashboard', 'bank', 'payment-history',
+];
+
+export default function AdminLayout({ children, onPageCsvExport }) {
   const router = useRouter();
   const pathname = usePathname();
+  const pageContentRef = useRef(null);
+  const pageCsvRoute = PAGE_CSV_ROUTES.find((route) => /^\/(admin|cashier)\//.test(pathname || '') && pathname.replace(/^\/(admin|cashier)\//, '') === route);
   const searchParams = useSearchParams();
   const isCashierPanel = pathname === '/cashier' || pathname?.startsWith('/cashier/');
   // Always start loading=true so SSR HTML matches the client's first paint.
@@ -111,6 +123,8 @@ export default function AdminLayout({ children }) {
   const [capabilities, setCapabilities] = useState(null);
   const [panelRole, setPanelRole] = useState(null);
   const [openGroups, setOpenGroups] = useState({});
+  const [navSearch, setNavSearch] = useState('');
+  const navSearchRef = useRef(null);
   const openLockRef = useRef(false);
   const navScrollRef = useRef(null);
   const navScrollRestoredRef = useRef(false);
@@ -456,6 +470,7 @@ export default function AdminLayout({ children }) {
         { icon: ClipboardCheck, label: 'Orders Report', href: '/admin/reports?tab=orders', color: 'text-cyan-700' },
         { icon: Undo2, label: 'Cancellations & Changes Report', href: '/admin/reports?tab=changes', color: 'text-red-700' },
         { icon: Warehouse, label: 'Inventory Report', href: '/admin/reports?tab=inventory', color: 'text-lime-700' },
+        { icon: Wheat, label: 'Ingredient Usage Report', href: '/admin/reports?tab=ingredients', color: 'text-green-700' },
         { icon: Users, label: 'Employees Report', href: '/admin/reports?tab=employees', color: 'text-fuchsia-700' },
         { icon: LayoutGrid, label: 'Tables Report', href: '/admin/reports?tab=tables', color: 'text-sky-700' },
         { icon: Calendar, label: 'Reservations Report', href: '/admin/reports?tab=reservations', color: 'text-violet-700' },
@@ -516,6 +531,7 @@ export default function AdminLayout({ children }) {
         { icon: Ruler, label: 'Unit Conversion', href: '/admin/unit-conversion', color: 'text-sky-600' },
         { icon: Building2, label: 'Suppliers', href: '/admin/suppliers', color: 'text-slate-600' },
         { icon: Trash, label: 'Wastage', href: '/admin/wastage', color: 'text-red-600' },
+        { icon: Soup, label: 'Kitchen Use', href: '/admin/kitchen-use', color: 'text-orange-600' },
       ],
     },
     {
@@ -583,6 +599,7 @@ export default function AdminLayout({ children }) {
         { icon: ClipboardCheck, label: 'Orders Report', href: '/cashier/reports?tab=orders', color: 'text-cyan-700', requiredPermission: 'report.orders.view' },
         { icon: Undo2, label: 'Cancellations & Changes Report', href: '/cashier/reports?tab=changes', color: 'text-red-700', requiredPermission: 'report.changes.view' },
         { icon: Warehouse, label: 'Inventory Report', href: '/cashier/reports?tab=inventory', color: 'text-lime-700', requiredPermission: 'report.inventory.view' },
+        { icon: Wheat, label: 'Ingredient Usage Report', href: '/cashier/reports?tab=ingredients', color: 'text-green-700', requiredPermission: 'report.inventory.view' },
         { icon: Users, label: 'Employees Report', href: '/cashier/reports?tab=employees', color: 'text-fuchsia-700', requiredPermission: 'report.employees.view' },
         { icon: LayoutGrid, label: 'Tables Report', href: '/cashier/reports?tab=tables', color: 'text-sky-700', requiredPermission: 'report.tables.view' },
         { icon: Calendar, label: 'Reservations Report', href: '/cashier/reports?tab=reservations', color: 'text-violet-700', requiredPermission: 'report.reservations.view' },
@@ -645,6 +662,7 @@ export default function AdminLayout({ children }) {
         { icon: Truck, label: 'Purchases', href: '/cashier/purchases', color: 'text-teal-600', requiredPermission: 'purchases.view' },
         { icon: Building2, label: 'Suppliers', href: '/cashier/suppliers', color: 'text-slate-600', requiredPermission: 'suppliers.view' },
         { icon: Trash, label: 'Wastage', href: '/cashier/wastage', color: 'text-red-600', requiredPermission: 'wastage.manage' },
+        { icon: Soup, label: 'Kitchen Use', href: '/cashier/kitchen-use', color: 'text-orange-600', requiredPermission: 'kitchen_use.view' },
       ],
     },
     {
@@ -718,6 +736,23 @@ export default function AdminLayout({ children }) {
       return items.length ? { ...group, items } : null;
     })
     .filter(Boolean);
+
+  // Search only navigation entries already allowed by permissions and deployment.
+  const searchWords = navSearch.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const searchingNav = searchWords.length > 0;
+  const matchesNavSearch = (item, groupLabel = '') => {
+    const aliases = item.href.includes('/kitchen-use') ? 'tasting testing staff meal owner sample'
+      : item.href.includes('/payroll') ? 'salary salaries advance wages'
+      : item.href.includes('/accounts-payable') ? 'supplier credit settlement payment payable' : '';
+    const text = `${groupLabel} ${item.label} ${item.href} ${aliases}`.toLowerCase().replace(/[-_/=?&]/g, ' ');
+    return searchWords.every((word) => text.includes(word));
+  };
+  const visibleNavGroups = searchingNav ? navGroups.map((group) => {
+    if (!group.items) return matchesNavSearch(group) ? group : null;
+    const items = group.items.filter((item) => matchesNavSearch(item, group.label));
+    return items.length ? { ...group, items } : null;
+  }).filter(Boolean) : navGroups;
+  const searchResults = visibleNavGroups.flatMap((group) => group.items || [group]);
 
   const allNavHrefs = useMemo(
     () =>
@@ -868,23 +903,73 @@ export default function AdminLayout({ children }) {
           </button>
         </div>
 
+        <div className="flex-shrink-0 border-b border-gray-100 p-3">
+          {showLabels ? (
+            <form
+              role="search"
+              aria-label="Sidebar navigation"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (searchingNav && searchResults[0]) navigate(searchResults[0].href);
+              }}
+              className="relative"
+            >
+              <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-gray-400" />
+              <input
+                ref={navSearchRef}
+                type="search"
+                aria-label="Search pages"
+                aria-controls="sidebar-navigation"
+                placeholder="Search pages…"
+                value={navSearch}
+                onChange={(event) => {
+                  setNavSearch(event.target.value);
+                  if (navScrollRef.current) navScrollRef.current.scrollTop = 0;
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') {
+                    event.preventDefault();
+                    setNavSearch('');
+                  }
+                }}
+                className="h-10 w-full rounded-lg border border-gray-200 bg-gray-50 pl-9 pr-3 text-sm text-gray-900 placeholder:text-gray-500 focus:border-gray-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-200"
+              />
+            </form>
+          ) : (
+            <button
+              type="button"
+              aria-label="Search pages"
+              title="Search pages"
+              onClick={() => {
+                openSidebar();
+                window.requestAnimationFrame(() => navSearchRef.current?.focus());
+              }}
+              className="flex h-10 w-full items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-gray-500"
+            >
+              <Search aria-hidden="true" className="h-5 w-5" />
+            </button>
+          )}
+        </div>
+
         <nav
+          id="sidebar-navigation"
           ref={attachNavScroll}
           onScroll={saveNavScroll}
           className="flex-1 overflow-y-auto overscroll-contain p-3 space-y-1"
         >
           {showLabels
-            ? navGroups.map((group) => {
+            ? visibleNavGroups.map((group) => {
                 if (!group.items) return renderNavButton(group, true);
                 const hasActive = group.items.some((it) => isActiveHref(it.href));
                 const anyGroupOpen = Object.values(openGroups).some(Boolean);
-                const expanded = openGroups[group.label] === true || (!anyGroupOpen && hasActive);
+                const expanded = searchingNav || openGroups[group.label] === true || (!anyGroupOpen && hasActive);
                 const groupBadge = group.items.reduce((n, it) => n + (it.badge || 0), 0);
                 const tint = NAV_TINTS[group.tint];
                 return (
                   <div key={group.label} className={`rounded-xl ${tint?.bg || ''}`}>
                     <button
                       type="button"
+                      aria-expanded={expanded}
                       onClick={() => toggleGroup(group.label)}
                       className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left text-xs font-semibold uppercase tracking-wide ${tint?.header || 'text-gray-500'} ${tint?.hover || 'hover:bg-gray-50'}`}
                     >
@@ -907,6 +992,11 @@ export default function AdminLayout({ children }) {
                 );
               })
             : flatItems.map((item) => renderNavButton(item, true))}
+          {showLabels && searchingNav && (
+            <p role="status" className="px-3 py-3 text-xs text-gray-500">
+              {searchResults.length ? `${searchResults.length} ${searchResults.length === 1 ? 'page' : 'pages'} found. Enter opens the first result.` : 'No pages found. Try a different search.'}
+            </p>
+          )}
         </nav>
 
         <div className="flex-shrink-0 p-3 border-t border-gray-200">
@@ -926,9 +1016,19 @@ export default function AdminLayout({ children }) {
         } ${sidebarOpen && !isDesktop ? 'opacity-45' : 'opacity-100'}`}
         style={{ '--admin-sidebar-offset': sidebarOpen ? '16rem' : '5rem' }}
       >
-        <div className="admin-page-content w-full min-w-0">
+        <div ref={pageContentRef} className="admin-page-content w-full min-w-0">
           <CashCountGate active={isCashierPanel && panelRole === 'cashier'}>{children}</CashCountGate>
         </div>
+        {pageCsvRoute && (
+          <button
+            type="button"
+            onClick={() => onPageCsvExport ? onPageCsvExport() : downloadElementCsv(pageContentRef.current, `${pageCsvRoute.replace('/', '-')}-${new Date().toISOString().slice(0, 10)}`)}
+            className="fixed bottom-4 right-4 z-40 inline-flex h-11 items-center gap-2 rounded-full border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-800 shadow-lg hover:bg-gray-50 print:hidden"
+            title="Download what this page shows as a CSV file"
+          >
+            <Download aria-hidden="true" className="h-4 w-4" /> Download CSV
+          </button>
+        )}
       </div>
     </div>
   );

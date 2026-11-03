@@ -272,6 +272,7 @@ export default function KitchenPage() {
           >
             <BookOpen className="w-3.5 h-3.5" /> <span>Recipes</span>
           </button>
+          {capabilities['kitchen_use.view'] && <Link href="/kitchen/kitchen-use" className="flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-teal-50 px-3 text-xs font-semibold text-teal-800 hover:bg-teal-100"><ClipboardList className="h-3.5 w-3.5" />Testing & use</Link>}
           {capabilities['cancellation_verifications.manage'] && capabilities['kot_cancellation_approval.enabled'] && <Link href="/kitchen/cancellations" className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold">Cancelled KOT approval</Link>}
           <button
             type="button"

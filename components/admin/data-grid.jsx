@@ -14,6 +14,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUpDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Download, Printer, Search } from 'lucide-react';
 import { toCsv } from '@/lib/csv';
+import { downloadReport } from '@/lib/report-export.js';
 import { formatNepalDate, formatNepalTime } from '@/lib/time-utils.js';
 import { loadPrintSettings, printThermalItems } from '@/lib/print-report.js';
 
@@ -84,6 +85,10 @@ export function downloadCsv(name, columns, rows) {
   link.download = `${name}.csv`;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+export function downloadExcel(name, columns, rows) {
+  downloadReport(name, 'excel', name.replace(/[-_]/g, ' '), [{ title: 'Records', columns: columns.map((c) => ({ key: c.key, label: c.label, ...(c.numeric && /amount|total|cost|price|balance|paid|due|spend|salary|debit|credit/.test(c.key) ? { type: 'currency' } : {}) })), rows: rows.map((row) => Object.fromEntries(columns.map((c) => [c.key, exportedCellValue(c, row)]))) }], [['Currency', 'NPR'], ['Generated (NPT)', formatNepalTime(new Date())]]);
 }
 
 const PAGE_SIZE_CHOICES = [25, 50, 100, 200];
@@ -312,6 +317,14 @@ export default function DataGrid({
             className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-gray-300 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40"
           >
             <Download className="h-4 w-4" /> <span className="hidden sm:inline">CSV</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => withAllRows((all) => downloadExcel(csvName || 'export', exportColumns, all))}
+            disabled={exportDisabled}
+            className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-gray-300 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+          >
+            <Download className="h-4 w-4" /> <span className="hidden sm:inline">Excel</span>
           </button>
           <button
             type="button"

@@ -41,7 +41,7 @@ test('invalid money, methods and dates cannot create records or journals', async
   for (const amount of [true, [], {}, 'NaN', Infinity, -10, 1e30]) assert.throws(() => salaryValue(amount));
   const before = (await db.get('SELECT COUNT(*) AS n FROM journal_entries')).n;
   for (const data of [
-    { amount: 10, method: 'made_up_bank' }, { amount: 10, method: 'owner_pocket' },
+    { amount: 10, method: 'made_up_bank' },
     { amount: 10, advanced_on: '2026-02-30' }, { amount: 10, advanced_on: '2099-01-01' },
     { amount: 0.001 },
   ]) await assert.rejects(() => recordAdvance(db, { employee_id: employeeId, ...data }, actor.id), (error) => error.status === 400);
