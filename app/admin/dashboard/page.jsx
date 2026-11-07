@@ -191,7 +191,7 @@ export default function AdminDashboard() {
   // New website orders arrive as pending WEB-* orders. Poll so they stand out.
   const fetchOnlineOrders = useCallback(async () => {
     try {
-      const res = await authedRequest('/api/admin/orders?status=pending&pageSize=100');
+      const res = await authedRequest('/api/admin/orders?status=pending&all=1');
       if (!res.ok) return;
       const data = await res.json();
       const rows = (data.orders || data.data || data.items || []).filter((o) =>

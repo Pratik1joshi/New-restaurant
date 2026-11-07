@@ -35,7 +35,7 @@ export default function RemindersPage() {
     (async () => {
       try {
         const [custRes, setRes, billsRes] = await Promise.all([
-          authedRequest('/api/admin/customers'),
+          authedRequest('/api/admin/customers?all=1'),
           authedRequest('/api/admin/settings'),
           authedRequest('/api/admin/accounts-receivable?view=open_bills').catch(() => null),
         ]);

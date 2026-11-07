@@ -12,6 +12,7 @@ import { printReport } from '@/lib/print-report.js';
 import { friendlyFromError, friendlyMessage } from '@/lib/friendly-message';
 import { useToast } from '@/components/ui/toast';
 import DateInput from '@/components/ui/date-input.jsx';
+import PaginationControls from '@/components/ui/pagination-controls';
 import { formatCalendarDate, formatCalendarDateTime } from '@/lib/calendar-system.js';
 
 const money = (value) => `Rs ${Number(value || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -42,6 +43,9 @@ export default function BusinessDaysPage() {
   const [context, setContext] = useState(null);
   const [summary, setSummary] = useState(null);
   const [history, setHistory] = useState([]);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyPageSize, setHistoryPageSize] = useState(25);
+  const [historyPagination, setHistoryPagination] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [opening, setOpening] = useState({ business_date: nepalToday(), opening_cash: '', opening_note: '', opening_cash_reason: '', opening_cash_note: '' });
@@ -60,11 +64,12 @@ export default function BusinessDaysPage() {
     try {
       const [dayData, historyData] = await Promise.all([
         apiJson('/api/admin/business-days?view=closing'),
-        apiJson('/api/admin/business-days?view=history&pageSize=25'),
+        apiJson(`/api/admin/business-days?view=history&page=${historyPage}&pageSize=${historyPageSize}`),
       ]);
       setContext(dayData);
       setSummary(dayData.summary || null);
       setHistory(historyData.rows || []);
+      setHistoryPagination(historyData.pagination || null);
       if (!dayData.activeSession) {
         const suggestedDate = dayData.current?.business_date
           ? (dateOnly(dayData.current.business_date) === nepalToday() ? dateOnly(dayData.current.business_date) : nepalToday())
@@ -74,9 +79,11 @@ export default function BusinessDaysPage() {
     } catch (error) {
       addToast(friendlyFromError(error, 'load_failed'));
     } finally { setLoading(false); }
-  }, [addToast]);
+  }, [addToast, historyPage, historyPageSize]);
 
-  useEffect(() => { load(); }, [load]);
+  // Quiet after the first load, so turning a history page keeps the screen in place.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { load({ quiet: Boolean(context) }); }, [load]);
 
   const openDay = async (event, action = '') => {
     event?.preventDefault?.();
@@ -190,6 +197,7 @@ export default function BusinessDaysPage() {
       </>}
 
       <History rows={history} onSelect={inspectDay} />
+      {historyPagination && <PaginationControls pagination={historyPagination} pageSizeChoices={[25, 50, 100]} onPageChange={setHistoryPage} onPageSizeChange={(size) => { setHistoryPageSize(size); setHistoryPage(1); }} />}
     </main>
 
     <Dialog open={Boolean(selected)} onOpenChange={(open) => { if (!open) setSelected(null); }}><DialogContent className="sm:max-w-6xl" data-print-root onClose={() => setSelected(null)}><DialogHeader><DialogTitle>Closing Report · {formatDate(selected?.day?.business_date)}</DialogTitle></DialogHeader>{selected?.day?.closed_at && <p className="mt-1 text-sm text-gray-500">Closed at <span className="font-semibold text-gray-800">{formatTime(selected.day.closed_at)}</span>{selected.day.closed_by_name ? ` by ${selected.day.closed_by_name}` : ''}</p>}<DayNotesPanel day={selected?.day} audit={selected?.audit || []} className="mt-4" />{selected?.summary && <div className="mt-6"><ClosingSummary summary={selected.summary} countedCash={selected.day?.counted_cash ?? ''} /></div>}<div className="mt-6 flex justify-end"><button type="button" onClick={(e) => printReport(e.currentTarget.closest('[data-print-root]'))} className="inline-flex h-10 items-center gap-2 border border-gray-300 px-4 text-sm font-semibold"><Printer className="h-4 w-4" />Print</button></div></DialogContent></Dialog>

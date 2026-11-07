@@ -2327,7 +2327,7 @@ function ActiveBillsModal({ busy, onClose, onSelect }) {
     setLoading(true);
     setError('');
     try {
-      const data = await api('/api/admin/bills?tab=active&pageSize=50');
+      const data = await api('/api/admin/bills?tab=active&pageSize=1000');
       setBills(data.bills || []);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }

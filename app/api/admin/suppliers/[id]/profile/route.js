@@ -33,7 +33,7 @@ export async function GET(request, { params }) {
          FROM purchases p
          LEFT JOIN users u ON u.id=p.received_by
          LEFT JOIN expenses e ON e.source_type='purchase' AND e.source_id=p.id
-         WHERE p.supplier_id=? ORDER BY COALESCE(p.invoice_date,CAST(p.created_at AS TEXT)) DESC,p.id DESC LIMIT 250`,
+         WHERE p.supplier_id=? ORDER BY COALESCE(p.invoice_date,CAST(p.created_at AS TEXT)) DESC,p.id DESC`,
         [supplierId]
       ),
       db.all(

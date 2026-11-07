@@ -9,6 +9,7 @@ import { friendlyFromError } from '@/lib/friendly-message'
 import { formatNepalDateTime } from '@/lib/report-dates.js'
 import { printKot } from '@/lib/pos-print.js'
 import OperationalDateFilter from '@/components/ui/operational-date-filter'
+import PaginationControls from '@/components/ui/pagination-controls'
 import { operationalDateRange } from '@/lib/operational-date-range'
 import { orderTypeLabel } from '@/lib/order-types.js'
 
@@ -35,11 +36,14 @@ export default function WaiterKotsPage() {
   const [paperSize, setPaperSize] = useState('80')
   const [printSettings, setPrintSettings] = useState({})
   const [datePreset, setDatePreset] = useState('today')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(50)
+  const [pagination, setPagination] = useState(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const params = new URLSearchParams({ tab, search, pageSize: '50' })
+      const params = new URLSearchParams({ tab, search, page: String(page), pageSize: String(pageSize) })
       if (tab !== 'active') {
         const range = operationalDateRange(datePreset)
         if (range.from) params.set('from', range.from)
@@ -49,6 +53,7 @@ export default function WaiterKotsPage() {
       const data = await res.json().catch(() => ({}))
       if (res.ok) {
         setKots(data.kots || [])
+        setPagination(data.pagination || null)
         setCounts(data.counts || {})
       } else {
         addToast(friendlyFromError(data, 'load_failed'))
@@ -58,7 +63,9 @@ export default function WaiterKotsPage() {
     } finally {
       setLoading(false)
     }
-  }, [tab, search, datePreset, apiCall, addToast])
+  }, [tab, search, datePreset, page, pageSize, apiCall, addToast])
+
+  useEffect(() => { setPage(1) }, [tab, search, datePreset, pageSize])
 
   useEffect(() => {
     apiCall('/api/admin/settings').then((r) => r.json()).then((d) => {
@@ -166,6 +173,7 @@ export default function WaiterKotsPage() {
             </div>
           ))
         )}
+        {pagination?.total > 25 && <PaginationControls pagination={pagination} pageSizeChoices={[25, 50, 100]} onPageChange={setPage} onPageSizeChange={setPageSize} />}
       </div>
     </div>
   )

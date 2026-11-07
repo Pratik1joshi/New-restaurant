@@ -31,7 +31,7 @@ export async function GET(request) {
 
     if (searchParams.get('board') === 'kitchen' || searchParams.get('include_items') === '1') {
       const board = await orderRepo.getKitchenBoard({
-        limit: filters.limit || 40,
+        limit: filters.limit,
       });
       return Response.json(board);
     }

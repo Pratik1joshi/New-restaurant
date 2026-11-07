@@ -39,13 +39,19 @@ export async function GET(request, { params }) {
        FROM wastage_log w
        LEFT JOIN users u ON w.logged_by = u.id
        WHERE w.raw_material_id = ?
-       ORDER BY w.created_at DESC
-       LIMIT 100`,
+       ORDER BY w.created_at DESC`,
       [id]
     );
 
-    const lastPurchase = movements.find((m) =>
-      ['purchase_receipt', 'manual_restock'].includes(m.change_type)
+    // Counted in SQL: `movements` holds only the latest 200, so a busy item's
+    // last purchase and totals would otherwise fall off the end of it.
+    const movementStats = await db.get(
+      `SELECT
+         SUM(CASE WHEN change_type IN ('purchase_receipt','manual_restock','opening_balance') THEN 1 ELSE 0 END) AS receipts,
+         SUM(CASE WHEN change_type = 'order_deduction' THEN 1 ELSE 0 END) AS consumption,
+         MAX(CASE WHEN change_type IN ('purchase_receipt','manual_restock') THEN created_at END) AS last_purchase
+       FROM stock_movements WHERE inventory_item_id = ?`,
+      [id]
     );
 
     const purchases = await db.all(
@@ -54,8 +60,7 @@ export async function GET(request, { params }) {
        FROM purchase_items pi
        JOIN purchases p ON pi.purchase_id = p.id
        WHERE pi.inventory_item_id = ?
-       ORDER BY p.created_at DESC
-       LIMIT 100`,
+       ORDER BY p.created_at DESC`,
       [id]
     );
 
@@ -66,7 +71,9 @@ export async function GET(request, { params }) {
       recipesUsing,
       wastageEntries,
       purchases,
-      lastPurchaseDate: lastPurchase?.created_at || null,
+      receiptCount: Number(movementStats?.receipts || 0),
+      consumptionCount: Number(movementStats?.consumption || 0),
+      lastPurchaseDate: movementStats?.last_purchase || null,
     });
   } catch (error) {
     return handleRouteError(error, 'Failed to load raw material detail');

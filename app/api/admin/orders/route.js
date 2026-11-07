@@ -100,6 +100,11 @@ export async function GET(request) {
       conditions.push('o.order_type = ?');
       params.push(orderType);
     }
+    // Website and QR orders. Filtered here because filtering a page in the
+    // browser lets dine-in orders crowd the online queue out of that page.
+    if (searchParams.get('source') === 'online') {
+      conditions.push(`(COALESCE(o.order_number,'') LIKE 'WEB-%' OR LOWER(COALESCE(o.notes,'')) LIKE '%customer via qr%')`);
+    }
     const from = searchParams.get('from');
     if (from) {
       conditions.push("date(o.created_at, '+5 hours', '+45 minutes') >= date(?)");

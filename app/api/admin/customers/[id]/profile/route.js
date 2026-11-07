@@ -38,8 +38,7 @@ export async function GET(request, { params }) {
          FROM orders o
          WHERE o.customer_id = ?
             OR (o.customer_phone IS NOT NULL AND o.customer_phone = ?)
-         ORDER BY o.created_at DESC
-         LIMIT 100`,
+         ORDER BY o.created_at DESC`,
         [customerId, customer.phone || '']
       ).catch(() => []),
       db.all(
@@ -48,8 +47,7 @@ export async function GET(request, { params }) {
          FROM bills b
          JOIN orders o ON o.id = b.order_id
          WHERE b.customer_id = ? OR o.customer_id = ?
-         ORDER BY b.created_at DESC
-         LIMIT 100`,
+         ORDER BY b.created_at DESC`,
         [customerId, customerId]
       ).catch(() => []),
       db.all(
@@ -69,8 +67,7 @@ export async function GET(request, { params }) {
          FROM bill_payments bp
          JOIN bills b ON b.id = bp.bill_id
          WHERE b.customer_id = ?
-         ORDER BY bp.created_at DESC
-         LIMIT 100`,
+         ORDER BY bp.created_at DESC`,
         [customerId]
       ).catch(() => []),
     ]);

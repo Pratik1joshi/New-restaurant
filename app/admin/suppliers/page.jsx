@@ -362,7 +362,7 @@ function SupplierDetail({ supplier, canViewPurchases, onClose }) {
       return undefined;
     }
     let cancelled = false;
-    apiJson(`/api/admin/purchases?supplier_id=${supplier.id}&page_size=200`)
+    apiJson(`/api/admin/purchases?supplier_id=${supplier.id}&export=1`)
       .then((body) => {
         if (!cancelled) setPurchases(body.purchases || []);
       })

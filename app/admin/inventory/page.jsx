@@ -74,7 +74,7 @@ export default function InventoryPage() {
     try {
       const [inv, sup, mov, waste, cats, menu] = await Promise.all([
         apiJson('/api/admin/inventory?include_archived=1'),
-        apiJson('/api/admin/suppliers').catch(() => ({ suppliers: [] })),
+        apiJson('/api/admin/suppliers?export=1').catch(() => ({ suppliers: [] })),
         // Only the counts that disagreed, filtered in SQL — this list shows 20.
         apiJson('/api/admin/stock-movements?variance_only=1&page_size=20').catch(() => ({ movements: [] })),
         // Only the aggregate is needed here, so ask for one row and read the

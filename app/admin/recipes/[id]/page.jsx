@@ -34,13 +34,16 @@ export default function RecipeProfilePage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [one, all, mov] = await Promise.all([
+      const [one, all] = await Promise.all([
         apiJson(`/api/admin/recipes?id=${id}`),
         apiJson('/api/admin/recipes?with_cost=1').catch(() => ({ recipes: [] })),
-        // Cost basis only comes from priced movements, so ask for those and cap
-        // the window rather than pulling a thousand rows to filter in the browser.
-        apiJson('/api/admin/stock-movements?priced_only=1&page_size=200').catch(() => ({ movements: [] })),
       ]);
+      // Asked for by ingredient: a shared 200-row window let busier items push a
+      // rarely bought ingredient's price history out entirely.
+      const ingredientIds = (one.recipe?.cost?.breakdown || []).map((b) => b.inventory_item_id).filter(Boolean);
+      const mov = ingredientIds.length
+        ? await apiJson(`/api/admin/stock-movements?priced_only=1&page_size=200&item_ids=${ingredientIds.join(',')}`).catch(() => ({ movements: [] }))
+        : { movements: [] };
       setRecipe(one.recipe);
       setAllRecipes(all.recipes || []);
       setMovements(mov.movements || []);

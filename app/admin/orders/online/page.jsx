@@ -74,13 +74,11 @@ export default function OnlineOrdersPage() {
 
   const fetchOrders = useCallback(async () => {
     try {
-      const res = await authedFetch('/api/admin/orders?pageSize=200&sort=created_at&dir=desc');
+      const res = await authedFetch('/api/admin/orders?source=online&page_size=200&sort=created_at&dir=desc');
       if (!res.ok) return;
       const data = await res.json();
-      const rows = (data.orders || data.data || []).filter((o) =>
-        String(o.order_number || '').startsWith('WEB-') || isQrOrder(o)
-      );
-      setOrders(rows);
+      // ponytail: newest 200 online orders; add a pager if that window ever hides open ones.
+      setOrders(data.orders || data.data || []);
     } catch { /* ignore */ } finally { setLoading(false); }
   }, []);
 

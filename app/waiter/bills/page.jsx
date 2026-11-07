@@ -12,6 +12,7 @@ import { printFinalBill } from '@/lib/pos-print.js'
 import { receiptFromBillDetail } from '@/lib/bill-receipt.js'
 import OperationalDateFilter from '@/components/ui/operational-date-filter'
 import PayQrModal from '@/components/waiter/pay-qr-modal'
+import PaginationControls from '@/components/ui/pagination-controls'
 import { operationalDateRange } from '@/lib/operational-date-range'
 
 const TABS = [
@@ -41,6 +42,9 @@ export default function WaiterBillsPage() {
   const [search, setSearch] = useState('')
   const [bills, setBills] = useState([])
   const [counts, setCounts] = useState({})
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(50)
+  const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState(null)
   const [settings, setSettings] = useState({})
@@ -51,7 +55,7 @@ export default function WaiterBillsPage() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const params = new URLSearchParams({ tab, search, pageSize: '50' })
+      const params = new URLSearchParams({ tab, search, page: String(page), pageSize: String(pageSize) })
       if (channel !== 'all') params.set('channel', channel)
       if (!['active', 'pending'].includes(tab)) {
         const range = operationalDateRange(datePreset)
@@ -62,6 +66,7 @@ export default function WaiterBillsPage() {
       const data = await res.json().catch(() => ({}))
       if (res.ok) {
         setBills(data.bills || [])
+        setTotal(Number(data.total || 0))
         setCounts(data.counts || {})
       } else {
         addToast(friendlyFromError(data, 'load_failed'))
@@ -71,7 +76,9 @@ export default function WaiterBillsPage() {
     } finally {
       setLoading(false)
     }
-  }, [tab, channel, search, datePreset, apiCall, addToast])
+  }, [tab, channel, search, datePreset, page, pageSize, apiCall, addToast])
+
+  useEffect(() => { setPage(1) }, [tab, channel, search, datePreset, pageSize])
 
   useEffect(() => {
     apiCall('/api/admin/settings').then((r) => r.json()).then((d) => setSettings(d.settings || {})).catch(() => {})
@@ -223,6 +230,7 @@ export default function WaiterBillsPage() {
             </div>
           ))
         )}
+        {total > 25 && <PaginationControls pagination={{ page, pageSize, total }} pageSizeChoices={[25, 50, 100]} onPageChange={setPage} onPageSizeChange={setPageSize} />}
       </div>
 
       {/* Here the outstanding balance IS known, so the amount shows large above

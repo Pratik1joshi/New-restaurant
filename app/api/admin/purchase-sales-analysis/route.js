@@ -77,7 +77,7 @@ export async function GET(request) {
     }
     const [suppliers, businessDays, charts, reconciliation, categories, masterGroups] = await Promise.all([
       db.all('SELECT id, name FROM suppliers ORDER BY name'),
-      db.all('SELECT id, business_date, status, opening_note FROM business_days ORDER BY business_date DESC, id DESC LIMIT 90'),
+      db.all('SELECT id, business_date, status, opening_note FROM business_days ORDER BY business_date DESC, id DESC'),
       q.get('charts') === '1' ? analysisCharts(db, range, filters, mode) : null,
       ['combined', 'purchases'].includes(mode) ? analysisReconciliation(db, range, filters) : null,
       mode === 'combined' ? [] : mode === 'sales'

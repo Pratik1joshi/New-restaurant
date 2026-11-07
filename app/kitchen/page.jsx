@@ -152,7 +152,7 @@ export default function KitchenPage() {
     if (load.inFlight) return
     load.inFlight = true
     try {
-      const res = await apiCall('/api/restaurant/orders?board=kitchen&limit=40')
+      const res = await apiCall('/api/restaurant/orders?board=kitchen')
       if (!res.ok) return
       const data = await res.json()
       const active = (data.orders || []).sort((a, b) => {

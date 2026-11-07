@@ -88,7 +88,9 @@ export default function AdminCustomers() {
   const fetchCustomers = async () => {
     try {
       const token = localStorage.getItem('pos_token');
-      const response = await fetch('/api/admin/customers', {
+      // ponytail: search, filters and totals run in the browser, so this needs every
+      // customer. Move them to the server if the list ever reaches many thousands.
+      const response = await fetch('/api/admin/customers?all=1', {
         headers: { Authorization: `Bearer ${token}` },
       });
 

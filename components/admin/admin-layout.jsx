@@ -271,7 +271,7 @@ export default function AdminLayout({ children, onPageCsvExport }) {
         const user = JSON.parse(localStorage.getItem('pos_user') || '{}');
         // New website (online) orders Ã¢â‚¬â€ pending WEB-* orders.
         try {
-          const oRes = await fetch('/api/admin/orders?status=pending&pageSize=100', {
+          const oRes = await fetch('/api/admin/orders?status=pending&all=1', {
             headers: { Authorization: `Bearer ${token}` },
           });
           if (oRes.ok) {

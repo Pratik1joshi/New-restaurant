@@ -21,6 +21,7 @@ export async function GET(request) {
     const { rows, pagination } = await listStockMovements(db, {
       ...readListParams(searchParams),
       inventoryItemId: searchParams.get('item_id') || undefined,
+      inventoryItemIds: (searchParams.get('item_ids') || '').split(',').map(Number).filter((n) => Number.isInteger(n) && n > 0),
       changeType: searchParams.get('change_type'),
       adjustmentsOnly: searchParams.get('adjustments_only') === '1',
       varianceOnly: searchParams.get('variance_only') === '1',

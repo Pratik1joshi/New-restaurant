@@ -67,7 +67,7 @@ export default function InventoryItemDetailPage() {
   useEffect(() => {
     fetchData();
     // Edit picklists — same source the inventory list page uses.
-    authedRequest('/api/admin/suppliers').then((r) => r.json()).then((d) => setSuppliers(d.suppliers || [])).catch(() => {});
+    authedRequest('/api/admin/suppliers?export=1').then((r) => r.json()).then((d) => setSuppliers(d.suppliers || [])).catch(() => {});
     authedRequest('/api/admin/inventory-categories').then((r) => r.json()).then((d) => setCategories((d.categories || []).map((c) => c.name).filter(Boolean))).catch(() => {});
     authedRequest('/api/admin/products').then((r) => r.json()).then((d) => setMenuItems(d.products || [])).catch(() => {});
   }, [id]);
@@ -94,10 +94,8 @@ export default function InventoryItemDetailPage() {
     );
   }
 
-  const { item, movements, recipesUsing, wastageEntries, lastPurchaseDate, purchases: purchaseInvoices = [] } = data;
+  const { item, movements, movementPagination, receiptCount, consumptionCount, recipesUsing, wastageEntries, lastPurchaseDate, purchases: purchaseInvoices = [] } = data;
   const status = statusOf(item);
-  const purchases = movements.filter((m) => RECEIPT_TYPES.includes(m.change_type));
-  const consumption = movements.filter((m) => m.change_type === 'order_deduction');
   const stockValue = Number(item.quantity || 0) * Number(item.cost_per_unit || 0);
   const purchasesBase = cashierPanel ? '/cashier/purchases' : '/admin/purchases';
 
@@ -179,8 +177,8 @@ export default function InventoryItemDetailPage() {
           <div className="rounded-xl border border-gray-200 bg-white p-5">
             <h2 className="font-semibold text-gray-800 mb-3">Purchase &amp; Wastage Summary</h2>
             <div className="space-y-2 text-sm">
-              <Row label="Purchases logged" value={Math.max(purchases.length, purchaseInvoices.length)} />
-              <Row label="Consumption events" value={consumption.length} />
+              <Row label="Purchases logged" value={Math.max(Number(receiptCount || 0), purchaseInvoices.length)} />
+              <Row label="Consumption events" value={Number(consumptionCount || 0)} />
               <Row label="Wastage entries" value={wastageEntries.length} />
               <Row
                 label="Total wasted qty"
@@ -250,6 +248,7 @@ export default function InventoryItemDetailPage() {
               );
             })}
             {!movements.length && <p className="text-sm text-gray-400">No stock movements recorded yet.</p>}
+            {movementPagination?.total > movements.length && <p className="text-xs text-gray-400">Showing the latest {movements.length} of {movementPagination.total} movements.</p>}
           </div>
         </div>
       </div>
