@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import AdminLayout from '@/components/admin/admin-layout';
 import { formatCurrency } from '@/lib/currency';
 import {
@@ -16,6 +16,9 @@ import { authedRequest } from '@/lib/authed-fetch';
 import { loadPrintSettings } from '@/lib/print-report.js';
 import { receiptFromOrderDetail } from '@/lib/bill-receipt.js';
 import { printFinalBill } from '@/lib/pos-print.js';
+import useServerList from '@/lib/use-server-list';
+import ListSearch from '@/components/ui/list-search';
+import PaginationControls from '@/components/ui/pagination-controls';
 
 function authedFetch(url, options = {}) {
   const token = typeof window !== 'undefined' ? localStorage.getItem('pos_token') : null;
@@ -55,13 +58,28 @@ const isQrOrder = (order) => String(order?.notes || '').toLowerCase().includes('
 export default function OnlineOrdersPage() {
   const router = useRouter();
   const { prompt } = useConfirm();
-  const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('new');
+  const activeTab = TABS.find((t) => t.key === tab);
   const [expanded, setExpanded] = useState(null);
   const [details, setDetails] = useState({});
   const [busy, setBusy] = useState(null);
   const [toast, setToast] = useState('');
+
+  const {
+    rows: orders,
+    extra,
+    loading,
+    pager,
+    search,
+    setSearch,
+    reload: fetchOrders,
+  } = useServerList({
+    url: '/api/admin/orders',
+    key: 'orders',
+    filters: { source: 'online', order_status: activeTab.status },
+    initialSort: { key: 'created_at', dir: 'desc' },
+    onError: (error) => setToast(error.message || 'Could not load orders.'),
+  });
 
   // The order's own bill on the receipt printer — not a print of this whole page.
   const printReceipt = async (o) => {
@@ -72,18 +90,7 @@ export default function OnlineOrdersPage() {
     printFinalBill(receipt, { size: settings.receipt_paper_size || '80', reprint: true, settings });
   };
 
-  const fetchOrders = useCallback(async () => {
-    try {
-      const res = await authedFetch('/api/admin/orders?source=online&page_size=200&sort=created_at&dir=desc');
-      if (!res.ok) return;
-      const data = await res.json();
-      // ponytail: newest 200 online orders; add a pager if that window ever hides open ones.
-      setOrders(data.orders || data.data || []);
-    } catch { /* ignore */ } finally { setLoading(false); }
-  }, []);
-
   useEffect(() => {
-    fetchOrders();
     const t = setInterval(fetchOrders, 30000);
     return () => clearInterval(t);
   }, [fetchOrders]);
@@ -139,9 +146,10 @@ export default function OnlineOrdersPage() {
     }
   };
 
-  const activeTab = TABS.find((t) => t.key === tab);
-  const filtered = orders.filter((o) => (activeTab.status ? o.status === activeTab.status : true));
-  const countFor = (status) => (status ? orders.filter((o) => o.status === status).length : orders.length);
+  const statusCounts = extra.status_counts || {};
+  const countFor = (status) => (status
+    ? statusCounts[status] || 0
+    : Object.values(statusCounts).reduce((sum, n) => sum + n, 0));
 
   return (
     <AdminLayout>
@@ -167,16 +175,27 @@ export default function OnlineOrdersPage() {
           ))}
         </div>
 
-        {loading ? (
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="sm:w-96">
+            <ListSearch value={search} onSearch={setSearch} placeholder="Search all orders by number, name, phone or bill..." />
+          </div>
+          {extra.summary && (
+            <p className="text-sm text-gray-600 tabular-nums">
+              {extra.summary.orders.toLocaleString()} order{extra.summary.orders === 1 ? '' : 's'} · <span className="font-semibold text-gray-900">{formatCurrency(extra.summary.grossRevenue)}</span>
+            </p>
+          )}
+        </div>
+
+        {loading && orders.length === 0 ? (
           <p className="text-center text-gray-500 py-16">Loading orders…</p>
-        ) : filtered.length === 0 ? (
+        ) : orders.length === 0 ? (
           <div className="text-center py-20 text-gray-500">
             <ShoppingBag className="w-10 h-10 mx-auto mb-3 opacity-30" />
-            <p className="font-medium">No {activeTab.label.toLowerCase()} orders.</p>
+            <p className="font-medium">{search ? 'No order matches that search.' : `No ${activeTab.label.toLowerCase()} orders.`}</p>
           </div>
         ) : (
           <div className="space-y-3">
-            {filtered.map((o) => {
+            {orders.map((o) => {
               const qrOrder = isQrOrder(o);
               const d = details[o.id];
               const items = d?.items || [];
@@ -265,6 +284,7 @@ export default function OnlineOrdersPage() {
             })}
           </div>
         )}
+        <PaginationControls {...pager} />
       </div>
 
       {toast && (

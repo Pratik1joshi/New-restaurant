@@ -19,4 +19,25 @@ Payment and advance dates cannot be in the future. Late entries belong to the bu
 
 The screens attach a unique request key to each submission. Retrying a saved request returns the same record instead of paying twice. Request receipts survive deletion, so an old retry cannot recreate a removed payment. Staff with payroll history must be deactivated instead of deleted.
 
-PostgreSQL deployment requires migrations through 073 (`npm run db:migrate`) before using the new payroll screens. SQLite development databases initialize the new tables automatically. Salary tracking does not reconstruct unrecorded historic salary entitlements or calculate attendance automatically. To end future salary accrual, set the salary to zero from the appropriate month.
+PostgreSQL deployment requires migrations through 078 (`npm run db:migrate`) before using the new payroll screens. SQLite development databases initialize the new tables automatically. Salary tracking does not reconstruct unrecorded historic salary entitlements or calculate attendance automatically. To end future salary accrual, set the salary to zero from the appropriate month.
+
+Staff without system login
+--------------------------
+
+Turn off System login on the staff form for helpers, dishwashers and others who never use the POS. They get no username or PIN and cannot sign in, but salary, advances, absences, food credit and the Staff Sheet work the same. Administrators must keep sign-in. Turning sign-in off later removes the PIN and ends open sessions; turning it back on requires a new PIN.
+
+Staff food credit
+-----------------
+
+Every staff member with a 10-digit phone is linked to one customer account (an existing customer with the same phone is adopted, otherwise one is created). The cashier charges that customer on credit at POS at the normal menu price; any discount is applied manually on the bill. Stock, revenue and Accounts Receivable behave like any credit sale. Free staff meals stay in Kitchen Use.
+
+When recording salary, the food credit deduction defaults to the food credit due, capped at the salary still to pay. It clears the oldest food bills first and posts Dr Salaries / Cr Accounts Receivable for that part. Unpaid food credit that the salary cannot cover stays open and is offered again next month. Deleting the salary payment reopens those bills.
+
+Settings / Business has "Limit staff food credit to remaining salary" (off by default). When on, POS refuses a staff credit bill that would take food credit above what is left of this month's salary.
+
+Food credit can also be settled (staff paid cash or online) or waived (administrator only, with a reason and typed confirmation) from the staff salary drawer or from the staff member's card in Customers. This is how to close food credit for staff who have left; it stays visible in Customers and Accounts Receivable until then.
+
+Staff Sheet
+-----------
+
+Payroll / Staff Sheet shows one row per staff member for an AD month: opening balance, salary, absence, advances, food deducted, waivers, payments and balance, plus food taken that month and today's food credit and advance due. Filter active staff, staff who left, or all. Export to Excel or CSV, or print an A4 landscape sheet with signature columns. Click a row to open that staff member's salary drawer.

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import AdminLayout from '@/components/admin/admin-layout';
-import { Search, Plus, Edit, Trash2, Phone, Mail, Eye, Users, Crown, ShieldAlert, Wallet, ShoppingBag, MessageCircle } from 'lucide-react';
+import { Plus, Edit, Trash2, Phone, Mail, Eye, Users, Crown, ShieldAlert, Wallet, ShoppingBag, MessageCircle, BadgeCheck } from 'lucide-react';
 import WhatsappBulkModal from '@/components/customers/whatsapp-bulk-modal';
 import { DEFAULT_CUSTOMER_MESSAGE, fillTemplate, openWhatsapp, whatsappNumber } from '@/lib/whatsapp.js';
 import { formatCurrency } from '@/lib/currency';
@@ -12,6 +12,10 @@ import { useConfirm } from '@/components/ui/confirm';
 import { friendlyMessage, friendlyFromError } from '@/lib/friendly-message';
 import FieldError, { inputErrorClass } from '@/components/ui/field-error';
 import { useCapabilities } from '@/lib/use-capabilities.js';
+import useServerList from '@/lib/use-server-list';
+import ListSearch from '@/components/ui/list-search';
+import FoodCreditActions from '@/components/staff/food-credit-actions';
+import PaginationControls from '@/components/ui/pagination-controls';
 import {
   digitsOnly,
   numbersOnlyInput,
@@ -44,23 +48,43 @@ export default function AdminCustomers() {
   // Was gated on the URL, which let a cashier who opened /admin/customers
   // directly see a button the route rejects. Now gated on the permission the
   // route actually checks, so the two can never disagree.
-  const { can } = useCapabilities();
-  const [customers, setCustomers] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { can, role } = useCapabilities();
   const [saving, setSaving] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [quickFilter, setQuickFilter] = useState('all'); // all | vip | credit | blacklisted
+  const [quickFilter, setQuickFilter] = useState('all'); // all | vip | credit | staff | blacklisted
   const [showModal, setShowModal] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [formData, setFormData] = useState(emptyForm);
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState({});
   const [waSettings, setWaSettings] = useState({ restaurant: '', template: DEFAULT_CUSTOMER_MESSAGE });
-  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  // Holds the customer, not just the id, so a pick survives turning the page.
+  const [selected, setSelected] = useState(() => new Map());
   const [showBulk, setShowBulk] = useState(false);
 
+  const {
+    rows: customers,
+    extra,
+    pagination,
+    loading,
+    pager,
+    search,
+    setSearch,
+    fetchAll,
+    reload: fetchCustomers,
+  } = useServerList({
+    url: '/api/admin/customers',
+    key: 'customers',
+    filters: {
+      vip: quickFilter === 'vip' ? 1 : '',
+      credit: quickFilter === 'credit' ? 1 : '',
+      blacklisted: quickFilter === 'blacklisted' ? 1 : '',
+      staff: quickFilter === 'staff' ? 1 : '',
+    },
+    initialSort: { key: 'name', dir: 'asc' },
+    onError: (error) => addToast(friendlyFromError(error, 'load_failed')),
+  });
+
   useEffect(() => {
-    fetchCustomers();
     (async () => {
       try {
         const token = localStorage.getItem('pos_token');
@@ -75,37 +99,22 @@ export default function AdminCustomers() {
     })();
   }, []);
 
-  const toggleSelected = (id) => setSelectedIds((prev) => {
-    const next = new Set(prev);
-    if (next.has(id)) next.delete(id); else next.add(id);
+  const toggleSelected = (customer) => setSelected((prev) => {
+    const next = new Map(prev);
+    if (next.has(customer.id)) next.delete(customer.id); else next.set(customer.id, customer);
     return next;
   });
+  const selectAllMatching = async () => {
+    try {
+      const all = await fetchAll();
+      setSelected(new Map(all.map((customer) => [customer.id, customer])));
+    } catch (error) {
+      addToast(friendlyFromError(error, 'load_failed'));
+    }
+  };
   const sendWhatsapp = (customer) => {
     const text = fillTemplate(waSettings.template, { name: customer.name, restaurant: waSettings.restaurant, phone: customer.phone });
     if (!openWhatsapp(customer.phone, text)) addToast({ title: 'Could not open WhatsApp', description: 'Check the phone number and allow pop-ups.' });
-  };
-
-  const fetchCustomers = async () => {
-    try {
-      const token = localStorage.getItem('pos_token');
-      // ponytail: search, filters and totals run in the browser, so this needs every
-      // customer. Move them to the server if the list ever reaches many thousands.
-      const response = await fetch('/api/admin/customers?all=1', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setCustomers(data.customers || []);
-      } else {
-        const data = await response.json().catch(() => ({}));
-        addToast(friendlyFromError(data, 'load_failed'));
-      }
-    } catch (error) {
-      addToast(friendlyFromError(error, 'load_failed'));
-    } finally {
-      setLoading(false);
-    }
   };
 
   const validateForm = (data = formData) => {
@@ -268,27 +277,16 @@ export default function AdminCustomers() {
     }
   };
 
-  const searchedCustomers = customers.filter(
-    (customer) =>
-      customer.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      customer.phone?.includes(searchTerm) ||
-      customer.email?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-  const filteredCustomers = searchedCustomers.filter((c) => {
-    if (quickFilter === 'vip') return !!c.is_vip;
-    if (quickFilter === 'credit') return Number(c.current_credit || 0) > 0.009;
-    if (quickFilter === 'blacklisted') return !!c.is_blacklisted;
-    return true;
-  });
-
-  const selectedCustomers = customers.filter((c) => selectedIds.has(c.id));
-  const allFilteredSelected = filteredCustomers.length > 0 && filteredCustomers.every((c) => selectedIds.has(c.id));
-
+  const filteredCustomers = customers;
+  const selectedCustomers = Array.from(selected.values());
+  const allFilteredSelected = filteredCustomers.length > 0 && filteredCustomers.every((c) => selected.has(c.id));
   const summary = {
-    total: customers.length,
-    vip: customers.filter((c) => c.is_vip).length,
-    withCredit: customers.filter((c) => Number(c.current_credit || 0) > 0.009).length,
-    outstanding: customers.reduce((s, c) => s + Number(c.current_credit || 0), 0),
+    total: extra.summary?.total ?? 0,
+    vip: extra.summary?.vip ?? 0,
+    withCredit: extra.summary?.withCredit ?? 0,
+    outstanding: extra.summary?.outstanding ?? 0,
+    blacklisted: extra.summary?.blacklisted ?? 0,
+    staff: extra.summary?.staff ?? 0,
   };
 
   return (
@@ -334,22 +332,14 @@ export default function AdminCustomers() {
         </div>
 
         <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6 space-y-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-700 w-5 h-5" />
-            <input
-              type="text"
-              placeholder="Search customers by name, phone, or email..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-gray-700 text-gray-900"
-            />
-          </div>
+          <ListSearch value={search} onSearch={setSearch} placeholder="Search all customers by name, phone, or email..." />
           <div className="flex flex-wrap gap-2">
             {[
               { id: 'all', label: `All (${summary.total})` },
               { id: 'vip', label: `VIP (${summary.vip})` },
               { id: 'credit', label: `Has credit due (${summary.withCredit})` },
-              { id: 'blacklisted', label: `Blacklisted (${customers.filter((c) => c.is_blacklisted).length})` },
+              { id: 'staff', label: `Staff (${summary.staff})` },
+              { id: 'blacklisted', label: `Blacklisted (${summary.blacklisted})` },
             ].map((f) => (
               <button
                 key={f.id}
@@ -371,20 +361,25 @@ export default function AdminCustomers() {
               <input
                 type="checkbox"
                 checked={allFilteredSelected}
-                onChange={() => setSelectedIds((prev) => {
-                  const next = new Set(prev);
+                onChange={() => setSelected((prev) => {
+                  const next = new Map(prev);
                   if (allFilteredSelected) filteredCustomers.forEach((c) => next.delete(c.id));
-                  else filteredCustomers.forEach((c) => next.add(c.id));
+                  else filteredCustomers.forEach((c) => next.set(c.id, c));
                   return next;
                 })}
                 className="h-4 w-4 accent-green-600"
               />
-              Select all shown
+              Select this page
             </label>
+            {pagination.total > filteredCustomers.length && (
+              <button type="button" onClick={selectAllMatching} className="text-sm font-medium text-green-700 hover:text-green-900">
+                Select all {pagination.total.toLocaleString()}
+              </button>
+            )}
             <span className="text-sm text-gray-600">{selectedCustomers.length} selected</span>
             {selectedCustomers.length > 0 && (
               <>
-                <button type="button" onClick={() => setSelectedIds(new Set())} className="text-sm font-medium text-gray-600 hover:text-gray-900">Clear</button>
+                <button type="button" onClick={() => setSelected(new Map())} className="text-sm font-medium text-gray-600 hover:text-gray-900">Clear</button>
                 <button type="button" onClick={() => setShowBulk(true)} className="ml-auto flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700">
                   <MessageCircle className="h-4 w-4" /> WhatsApp to selected
                 </button>
@@ -394,7 +389,7 @@ export default function AdminCustomers() {
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {loading ? (
+          {loading && filteredCustomers.length === 0 ? (
             <div className="col-span-full text-center py-12 text-gray-800">Loading customers...</div>
           ) : filteredCustomers.length === 0 ? (
             <div className="col-span-full text-center py-12 text-gray-800">No customers found</div>
@@ -409,8 +404,8 @@ export default function AdminCustomers() {
                 <div className="flex items-start justify-between mb-4">
                   <input
                     type="checkbox"
-                    checked={selectedIds.has(customer.id)}
-                    onChange={() => toggleSelected(customer.id)}
+                    checked={selected.has(customer.id)}
+                    onChange={() => toggleSelected(customer)}
                     aria-label={`Select ${customer.name}`}
                     className="mr-3 mt-1.5 h-4 w-4 shrink-0 accent-green-600"
                   />
@@ -419,6 +414,11 @@ export default function AdminCustomers() {
                       {customer.name}
                       {customer.is_vip ? <Crown className="h-4 w-4 text-amber-500" /> : null}
                       {customer.is_blacklisted ? <ShieldAlert className="h-4 w-4 text-red-500" /> : null}
+                      {customer.employee_id ? (
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${Number(customer.staff_active) === 1 ? 'bg-indigo-100 text-indigo-800' : 'bg-gray-200 text-gray-700'}`}>
+                          <BadgeCheck className="h-3 w-3" /> {Number(customer.staff_active) === 1 ? 'Staff' : 'Former staff'}
+                        </span>
+                      ) : null}
                     </h3>
                     <p className="text-sm text-gray-700">ID: {customer.id}</p>
                   </button>
@@ -491,11 +491,22 @@ export default function AdminCustomers() {
                     <p className={`mt-0.5 truncate text-sm font-bold ${credit > 0.009 ? 'text-rose-700' : 'text-gray-900'}`}>{formatCurrency(credit)}</p>
                   </div>
                 </div>
+                {customer.employee_id && credit > 0.009 && can('customer_ledger.access') && (
+                  <div className="mt-3 rounded-xl border border-indigo-100 bg-indigo-50/60 p-3">
+                    <p className="mb-2 text-xs text-indigo-900">
+                      Staff food credit{customer.staff_name ? ` for ${customer.staff_name}` : ''}.
+                      {Number(customer.staff_active) === 1 ? ' Usually deducted from salary in Payroll.' : ' Staff has left: settle or waive here.'}
+                    </p>
+                    <FoodCreditActions size="sm" customerId={customer.id} staffName={customer.staff_name || customer.name}
+                      outstanding={credit} staffActive={Number(customer.staff_active) === 1} canWaive={role === 'admin'} onDone={fetchCustomers} />
+                  </div>
+                )}
               </div>
               );
             })
           )}
         </div>
+        <PaginationControls {...pager} />
       </div>
 
       <WhatsappBulkModal

@@ -4,6 +4,7 @@ import { findCustomerByPhone, ensureCustomersTable, normalizePhone } from '@/lib
 import { validatePhone, validateName, validateEmail } from '@/lib/form-validation.js';
 import { requireAuth, handleRouteError } from '@/lib/api-guard.js';
 import { readListParams, resolveOrderBy, buildSearch, paginateQuery } from '@/lib/paginate.js';
+import { columnExists } from '@/lib/db/schema-helpers.js';
 
 const CUSTOMER_SORTS = {
   name: 'c.name',
@@ -58,6 +59,9 @@ export async function GET(request) {
 
     if (searchParams.get('vip') === '1') conditions.push('COALESCE(c.is_vip, 0) = 1');
     if (searchParams.get('blacklisted') === '1') conditions.push('COALESCE(c.is_blacklisted, 0) = 1');
+    if (searchParams.get('credit') === '1') conditions.push('COALESCE(c.current_credit, 0) > 0.009');
+    const hasStaffLink = await columnExists(db, 'customers', 'employee_id');
+    if (searchParams.get('staff') === '1') conditions.push(hasStaffLink ? 'c.employee_id IS NOT NULL' : '1=0');
 
     const searchClause = buildSearch(search, CUSTOMER_SEARCH_COLUMNS);
     if (searchClause.clause) {
@@ -66,8 +70,10 @@ export async function GET(request) {
     }
 
     const { rows, pagination } = await paginateQuery(db, {
-      columns: 'c.*',
-      from: 'customers c',
+      columns: hasStaffLink
+        ? 'c.*, su.full_name AS staff_name, COALESCE(su.is_active, 0) AS staff_active'
+        : 'c.*',
+      from: hasStaffLink ? 'customers c LEFT JOIN users su ON su.id = c.employee_id' : 'customers c',
       where: conditions.join(' AND '),
       params,
       orderBy: resolveOrderBy(sort, dir, CUSTOMER_SORTS, 'name', 'c.id'),
@@ -76,7 +82,31 @@ export async function GET(request) {
       exportAll,
     });
 
-    return NextResponse.json({ customers: rows, pagination });
+    // Totals cover every page of the search, and ignore the VIP / credit /
+    // blacklist chips so each chip can still show its own count.
+    const totals = await db.get(
+      `SELECT COUNT(*) AS total,
+              SUM(CASE WHEN COALESCE(c.is_vip, 0) = 1 THEN 1 ELSE 0 END) AS vip,
+              SUM(CASE WHEN COALESCE(c.is_blacklisted, 0) = 1 THEN 1 ELSE 0 END) AS blacklisted,
+              SUM(CASE WHEN COALESCE(c.current_credit, 0) > 0.009 THEN 1 ELSE 0 END) AS with_credit,
+              ${hasStaffLink ? 'SUM(CASE WHEN c.employee_id IS NOT NULL THEN 1 ELSE 0 END)' : '0'} AS staff,
+              COALESCE(SUM(CASE WHEN COALESCE(c.current_credit, 0) > 0.009 THEN c.current_credit ELSE 0 END), 0) AS outstanding
+       FROM customers c WHERE ${searchClause.clause || '1=1'}`,
+      searchClause.params
+    );
+
+    return NextResponse.json({
+      customers: rows,
+      pagination,
+      summary: {
+        total: Number(totals?.total || 0),
+        vip: Number(totals?.vip || 0),
+        blacklisted: Number(totals?.blacklisted || 0),
+        withCredit: Number(totals?.with_credit || 0),
+        staff: Number(totals?.staff || 0),
+        outstanding: Number(totals?.outstanding || 0),
+      },
+    });
   } catch (error) {
     return handleRouteError(error, 'Could not load customers. Please try again.');
   }

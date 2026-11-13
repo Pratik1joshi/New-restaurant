@@ -54,6 +54,7 @@ export default function EmployeesPage() {
     hire_date: '',
     department_id: '',
     designation_id: '',
+    can_login: true,
   });
   const [payrollFor, setPayrollFor] = useState(null);
 
@@ -93,10 +94,11 @@ export default function EmployeesPage() {
 
     const nextErrors = {
       full_name: validateName(formData.full_name, 'full name'),
-      username: !String(formData.username || '').trim()
+      username: formData.can_login && !String(formData.username || '').trim()
         ? 'Please enter a username.'
         : null,
-      pin: editingEmployee ? null : validatePin(formData.pin),
+      // A PIN is needed only when sign-in is new for this person.
+      pin: !formData.can_login || (editingEmployee && Number(editingEmployee.can_login ?? 1) === 1) ? null : validatePin(formData.pin),
       phone: validatePhone(formData.phone, { required: false }),
       email: validateEmail(formData.email, { required: false }),
     };
@@ -148,6 +150,7 @@ export default function EmployeesPage() {
           hire_date: '',
           department_id: '',
           designation_id: '',
+          can_login: true,
         });
         addToast(friendlyMessage('save_success', {
           description: editingEmployee ? 'Employee details were updated.' : 'New employee was added.',
@@ -225,6 +228,7 @@ export default function EmployeesPage() {
       hire_date: employee.hire_date ? String(employee.hire_date).slice(0, 10) : '',
       department_id: employee.department_id ?? '',
       designation_id: employee.designation_id ?? '',
+      can_login: Number(employee.can_login ?? 1) === 1,
     });
     setShowForm(true);
   };
@@ -331,7 +335,7 @@ export default function EmployeesPage() {
 
   const ActionButtons = ({ employee }) => (
     <>
-      <button
+      {Number(employee.can_login ?? 1) === 1 && <button
         type="button"
         onClick={() => {
           setChangingPinFor(employee);
@@ -341,7 +345,7 @@ export default function EmployeesPage() {
         title="Change PIN"
       >
         <Key className="w-4 h-4" />
-      </button>
+      </button>}
       <button
         type="button"
         onClick={() => setPayrollFor(employee)}
@@ -426,6 +430,7 @@ export default function EmployeesPage() {
                   hire_date: '',
                   department_id: '',
                   designation_id: '',
+                  can_login: true,
                 });
               }}
               className="flex items-center space-x-2 px-6 py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800"
@@ -458,8 +463,25 @@ export default function EmployeesPage() {
                 </div>
 
                 <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                  <label className={`flex items-start justify-between gap-4 rounded-xl border p-4 ${formData.can_login ? 'border-gray-200' : 'border-amber-200 bg-amber-50'} ${editingEmployee?.is_primary_admin || formData.role === 'admin' ? 'opacity-60' : ''}`}>
+                    <span>
+                      <span className="block text-sm font-semibold text-gray-900">System login</span>
+                      <span className="mt-0.5 block text-xs text-gray-600">
+                        {formData.can_login
+                          ? 'This person signs in with a username and PIN.'
+                          : 'No sign-in. Use for helpers, dishwashers and other staff who only need salary, advances and food credit.'}
+                      </span>
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={formData.can_login}
+                      disabled={editingEmployee?.is_primary_admin || formData.role === 'admin'}
+                      onChange={(e) => setFormData({ ...formData, can_login: e.target.checked })}
+                      className="mt-1 h-5 w-5 shrink-0 rounded border-gray-300"
+                    />
+                  </label>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
+                    {formData.can_login && <div>
                       <label className="block text-sm font-medium text-gray-900 mb-2">Username *</label>
                       <input
                         type="text"
@@ -468,9 +490,9 @@ export default function EmployeesPage() {
                         value={formData.username}
                         onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-400 text-gray-900"
-                        disabled={!!editingEmployee}
+                        disabled={!!editingEmployee && Number(editingEmployee.can_login ?? 1) === 1}
                       />
-                    </div>
+                    </div>}
                     <div>
                       <label className="block text-sm font-medium text-gray-900 mb-2">Full Name *</label>
                       <input
@@ -489,7 +511,7 @@ export default function EmployeesPage() {
                       <select
                         required
                         value={formData.role}
-                        onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                        onChange={(e) => setFormData({ ...formData, role: e.target.value, can_login: e.target.value === 'admin' ? true : formData.can_login })}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-400 text-gray-900"
                         disabled={editingEmployee?.is_primary_admin}
                       >
@@ -502,14 +524,14 @@ export default function EmployeesPage() {
                         <p className="text-xs text-purple-700 mt-1">Main admin role is locked.</p>
                       )}
                     </div>
-                    <div>
+                    {formData.can_login && <div>
                       <label className="block text-sm font-medium text-gray-900 mb-2">
-                        {editingEmployee ? 'PIN (leave empty to keep current)' : 'PIN (4 digits) *'}
+                        {editingEmployee && Number(editingEmployee.can_login ?? 1) === 1 ? 'PIN (leave empty to keep current)' : 'PIN (4 digits) *'}
                       </label>
                       <input
                         type="password"
                         autoComplete="new-password"
-                        required={!editingEmployee}
+                        required={!editingEmployee || Number(editingEmployee.can_login ?? 1) !== 1}
                         maxLength={4}
                         pattern="[0-9]{4}"
                         value={formData.pin}
@@ -518,7 +540,7 @@ export default function EmployeesPage() {
                         placeholder="4 digit PIN"
                       />
                       <FieldError message={formErrors.pin} />
-                    </div>
+                    </div>}
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -543,6 +565,7 @@ export default function EmployeesPage() {
                         placeholder="98XXXXXXXX"
                       />
                       <FieldError message={formErrors.phone} />
+                      <p className="mt-1 text-xs text-gray-500">A 10-digit phone links this staff member to a customer account for food credit at POS.</p>
                     </div>
                   </div>
 
@@ -772,7 +795,7 @@ export default function EmployeesPage() {
                           <Shield className="w-3.5 h-3.5 text-purple-600 flex-shrink-0" title="Main admin" />
                         )}
                       </h3>
-                      <p className="text-xs text-gray-500">@{employee.username}</p>
+                      <p className="text-xs text-gray-500">{Number(employee.can_login ?? 1) === 1 ? `@${employee.username}` : 'No system login'}</p>
                     </div>
                     <span className={`px-2.5 py-1 rounded-full text-xs font-bold flex-shrink-0 ${
                       employee.is_active
@@ -795,11 +818,12 @@ export default function EmployeesPage() {
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
+                      disabled={Number(employee.can_login ?? 1) !== 1}
                       onClick={() => {
                         setChangingPinFor(employee);
                         setShowPinModal(true);
                       }}
-                      className="py-2 text-green-600 bg-green-50 rounded-lg text-sm font-semibold"
+                      className="py-2 text-green-600 bg-green-50 rounded-lg text-sm font-semibold disabled:opacity-40"
                     >
                       PIN
                     </button>
@@ -870,7 +894,7 @@ export default function EmployeesPage() {
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-gray-700">{employee.username}</td>
+                      <td className="px-6 py-4 text-gray-700">{Number(employee.can_login ?? 1) === 1 ? employee.username : <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">No login</span>}</td>
                       <td className="px-6 py-4">
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${roleColors[employee.role]}`}>
                           {employee.role.charAt(0).toUpperCase() + employee.role.slice(1)}

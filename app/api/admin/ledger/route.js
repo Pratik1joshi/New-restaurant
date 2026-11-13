@@ -10,6 +10,7 @@ import {
   journalList,
 } from '@/lib/accounting.js';
 import { listDrawers, listBankAccounts } from '@/lib/accounting-cash.js';
+import { readListParams } from '@/lib/paginate.js';
 
 /**
  * Read-only accounting views, all derived from journal_lines:
@@ -40,12 +41,16 @@ export async function GET(request) {
       return NextResponse.json({ accounts, banks, drawers, pending: [] });
     }
     if (view === 'journal') {
-      return NextResponse.json({ journals: await journalList(db, { from, to, source_type: q.get('source_type') }) });
+      const { page, pageSize, search, exportAll } = readListParams(q);
+      const { rows, pagination, summary } = await journalList(db, { from, to, source_type: q.get('source_type'), search, page, pageSize, exportAll });
+      return NextResponse.json({ journals: rows, pagination, summary });
     }
     if (view === 'ledger') {
       const accountId = q.get('account_id');
       if (!accountId) return NextResponse.json({ error: 'account_id required' }, { status: 400 });
-      return NextResponse.json({ lines: await generalLedger(db, { accountId, from, to }) });
+      const { page, pageSize, exportAll, search } = readListParams(q);
+      const { rows, pagination, totals, carried } = await generalLedger(db, { accountId, from, to, search, page, pageSize, exportAll });
+      return NextResponse.json({ lines: rows, pagination, totals, carried });
     }
     if (view === 'cashbook') {
       return NextResponse.json({ lines: await cashBook(db, { drawerId: q.get('drawer_id'), from, to }) });

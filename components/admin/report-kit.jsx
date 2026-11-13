@@ -7,7 +7,7 @@
  * gray-500 secondary text, small colour chips, semantic colour only.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -488,7 +488,11 @@ export function DataTable({
   const [detailData, setDetailData] = useState(null);
   const [detailError, setDetailError] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [fullTable, setFullTable] = useState({ for: null, rows: null });
+  const [fullTable, setFullTable] = useState({ for: null, rows: null, error: null });
+  // Parents pass an inline loader; keep the latest without restarting the load
+  // on every render (that used to cancel it forever while the user typed).
+  const exportAllRef = useRef(onExportAll);
+  exportAllRef.current = onExportAll;
 
   // Searching a server-paged table must cover every page, not just the one on
   // screen: load the whole table once and search + page it here instead.
@@ -496,16 +500,20 @@ export function DataTable({
     serverPagination && onExportAll && search.trim()
     && Number(serverPagination.total ?? rows.length) > rows.length
   );
-  const allRows = fullTable.for === serverPagination ? fullTable.rows : null;
+  const loadedForThisTable = fullTable.for === serverPagination;
+  const allRows = loadedForThisTable ? fullTable.rows : null;
+  const allRowsError = loadedForThisTable ? fullTable.error : null;
   useEffect(() => {
-    if (!needsAllRows || allRows) return undefined;
+    if (!needsAllRows || allRows || allRowsError) return undefined;
     let cancelled = false;
-    onExportAll()
-      .then((list) => { if (!cancelled) setFullTable({ for: serverPagination, rows: list || [] }); })
-      .catch(() => {});
+    exportAllRef.current()
+      .then((list) => { if (!cancelled) setFullTable({ for: serverPagination, rows: list || [], error: null }); })
+      .catch((error) => { if (!cancelled) setFullTable({ for: serverPagination, rows: null, error: error?.message || 'Could not load every page.' }); });
     return () => { cancelled = true; };
-  }, [needsAllRows, allRows, serverPagination, onExportAll]);
+  }, [needsAllRows, allRows, allRowsError, serverPagination]);
   const searchingAllRows = needsAllRows && Boolean(allRows);
+  // Never show one page's matches as if they were the answer.
+  const searchPending = needsAllRows && !allRows && !allRowsError;
 
   const visible = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -819,8 +827,17 @@ export function DataTable({
       </div>
 
       {exportError && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{exportError}</p>}
+      {needsAllRows && allRowsError && (
+        <p role="alert" className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+          Could not search every page ({allRowsError}). Showing matches on this page only.
+        </p>
+      )}
       {/* A capped list must never read as a complete one. */}
-      {!pagedVisible.length ? (
+      {searchPending ? (
+        <p className="flex items-center justify-center gap-2 py-12 text-sm text-gray-500">
+          <LoaderCircle className="h-4 w-4 animate-spin" /> Searching all {Number(serverPagination.total).toLocaleString()} records…
+        </p>
+      ) : !pagedVisible.length ? (
         <p className="py-12 text-center text-sm text-gray-500">
           {search.trim() ? `Nothing in this table matches “${search.trim()}”.` : empty}
         </p>
@@ -895,7 +912,7 @@ export function DataTable({
           </table>
         </div>
       )}
-      {tablePagination && (
+      {tablePagination && !searchPending && (
         <PaginationControls
           pagination={tablePagination}
           loading={pageLoading}

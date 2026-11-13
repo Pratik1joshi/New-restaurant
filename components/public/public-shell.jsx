@@ -14,6 +14,7 @@ import { ArrowUpRight, Lock, Mail, MapPin, Menu, MessageCircle, Phone, UtensilsC
 const NAV = [
   { href: '/', label: 'Home' },
   { href: '/menu', label: 'Menu' },
+  { href: '/offers', label: 'Offers' },
   { href: '/about', label: 'About' },
   { href: '/gallery', label: 'Gallery' },
   { href: '/contact', label: 'Contact' },

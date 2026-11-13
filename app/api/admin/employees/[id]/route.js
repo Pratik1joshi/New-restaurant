@@ -6,11 +6,13 @@ import bcrypt from 'bcryptjs';
 import { assertPayrollAllowsEmployeeDeletion, getPrimaryAdminId, isPrimaryAdmin } from '@/lib/employees.js';
 import { requireAuth, handleRouteError } from '@/lib/api-guard.js';
 import { ensureHrmSchema } from '@/lib/hrm.js';
+import { syncStaffCustomer } from '@/lib/staff-food-credit.js';
 
 function employeeSelect(id) {
   return [
     `SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone, u.is_active, u.created_at,
             u.salary, u.absence_daily_rate, u.hire_date, u.position, u.department_id, u.designation_id,
+            COALESCE(u.can_login, 1) AS can_login,
             dep.name AS department_name, des.name AS designation_name
      FROM users u
      LEFT JOIN departments dep ON dep.id = u.department_id
@@ -79,6 +81,13 @@ export async function PUT(request, { params }) {
     const dailyRate = data.absence_daily_rate === undefined ? existingUser.absence_daily_rate : salaryValue(data.absence_daily_rate, 'Daily absence deduction') ?? 0;
     const effectiveMonth = payrollMonth(data.salary_effective_month || undefined);
     if (effectiveMonth < payrollMonth()) return NextResponse.json({ error: 'Salary changes must start this month or a future month.' }, { status: 400 });
+    const hadLogin = Number(existingUser.can_login ?? 1) === 1;
+    const canLogin = data.can_login === undefined ? hadLogin : data.can_login !== false;
+    const nextRole = primary ? 'admin' : (data.role ?? existingUser.role);
+    if (!canLogin && nextRole === 'admin') return NextResponse.json({ error: 'An administrator must be able to sign in.' }, { status: 400 });
+    if (canLogin && !hadLogin && !/^[0-9]{4}$/.test(String(data.pin || ''))) {
+      return NextResponse.json({ error: 'Set a four digit PIN to turn on sign-in for this staff member.' }, { status: 400 });
+    }
     const hireDate = data.hire_date === undefined ? existingUser.hire_date : (data.hire_date || null);
     const position = data.position === undefined ? existingUser.position : (data.position || null);
     const departmentId = data.department_id === undefined ? existingUser.department_id : (data.department_id ? Number(data.department_id) : null);
@@ -128,6 +137,12 @@ export async function PUT(request, { params }) {
       if (Number(salary) !== Number(existingUser.salary) || data.salary_effective_month) {
         await saveSalaryTerm(tx, id, salary, effectiveMonth, auth.user.id);
       }
+      if (canLogin !== hadLogin) {
+        // Turning sign-in off also kills the PIN and any open session.
+        await tx.run(`UPDATE users SET can_login = ?${canLogin ? '' : ", password_hash = '!'"} WHERE id = ?`, [canLogin ? 1 : 0, id]);
+        if (!canLogin) await tx.run('DELETE FROM sessions WHERE user_id = ?', [id]).catch(() => {});
+      }
+      await syncStaffCustomer(tx, id);
     });
 
     const [sql, args] = employeeSelect(id);

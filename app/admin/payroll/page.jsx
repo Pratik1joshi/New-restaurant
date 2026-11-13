@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { BanknoteArrowDown, Download, Search, WalletCards } from 'lucide-react';
+import Link from 'next/link';
+import { BanknoteArrowDown, Download, Search, Sheet, WalletCards } from 'lucide-react';
 import AdminLayout from '@/components/admin/admin-layout';
 import PayrollDrawer from '@/components/employees/payroll-drawer';
 import { KpiCards } from '@/components/admin/report-kit';
@@ -103,9 +104,14 @@ export default function PayrollPage() {
             <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">Salary &amp; Advances</h1>
             <p className="mt-1 text-sm text-gray-500">See monthly salary balances, advances, deductions and payment history.</p>
           </div>
+          <div className="flex flex-wrap gap-2">
+          <Link href={`${isCashier ? '/cashier' : '/admin'}/payroll/sheet`} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-semibold text-white hover:bg-gray-800 hover:text-white">
+            <Sheet className="h-4 w-4" /> Monthly staff sheet
+          </Link>
           <button type="button" onClick={exportAdvances} disabled={!data.advances?.length} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-gray-300 px-4 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40">
             <Download className="h-4 w-4" /> Export advance report
           </button>
+          </div>
         </div>
       </header>
 

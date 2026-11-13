@@ -135,7 +135,7 @@ export async function POST(request, context) {
     if (reopenedBill) {
       const revAudit = await db.get(
         `SELECT previous_value, new_value FROM bill_audit
-         WHERE bill_id = ? AND event = 'bill_reopened_to_pos' ORDER BY id DESC LIMIT 1`,
+         WHERE bill_id = ? AND event = 'bill_reopened_to_pos' AND previous_value IS NOT NULL ORDER BY id DESC LIMIT 1`,
         [reopenedBill.id]
       ).catch(() => null);
       const snap = parseJsonField(revAudit?.previous_value) || parseJsonField(revAudit?.new_value) || {};
@@ -152,6 +152,11 @@ export async function POST(request, context) {
           [reopenedBill.id]
         ).catch(() => []);
       }
+    }
+
+    const refundMethod = normalizePaymentMethod(data.refund_method || data.payment_method || 'cash');
+    if (reopenedBill && !['cash', 'online'].includes(refundMethod)) {
+      return NextResponse.json({ error: 'Choose cash or online for the refund.' }, { status: 400 });
     }
 
     const result = await db.transaction(async (tx) => {
@@ -191,11 +196,16 @@ export async function POST(request, context) {
          WHERE oi.order_id = ? AND COALESCE(oi.status,'') NOT IN ('voided','cancelled')`, [orderId]
       );
       const subtotal = promotionItems.reduce((sum, item) => sum + Number(item.subtotal || 0), 0);
-      if (subtotal <= 0) throw Object.assign(new Error('This order has no billable items.'), { status: 409, code: 'empty_order' });
+      if (subtotal <= 0 && !reopenedBill) throw Object.assign(new Error('This order has no billable items.'), { status: 409, code: 'empty_order' });
 
       let promotion = null;
       const manualDiscount = Number(data.discount || 0);
-      if (!(manualDiscount > 0)) {
+      // A reopened bill keeps its original deal. Only an explicit coupon or the
+      // bill's own promotion applies — a new auto-offer must not discount
+      // food that was already sold and paid for.
+      const reopenAllowsPromotion = !reopenedBill || data.coupon_code
+        || (Number(data.promotion_id || 0) && Number(data.promotion_id) === Number(reopenedBill.promotion_id || 0));
+      if (!(manualDiscount > 0) && subtotal > 0 && reopenAllowsPromotion) {
         const requestedPromotionId = Number(data.promotion_id || 0);
         const savedPromotionId = Number(order.promotion_id || reopenedBill?.promotion_id || 0);
         const promotionId = requestedPromotionId || savedPromotionId;
@@ -269,7 +279,7 @@ export async function POST(request, context) {
             : null,
         servicePercent
       );
-      const totals = calculateBillTotals(subtotal, {
+      const totals = subtotal <= 0 ? calculateBillTotals(0, { vatPercent: effectiveVatPercent }) : calculateBillTotals(subtotal, {
         discountAmount: promotion?.discount || (manualDiscount > 0 ? manualDiscount : undefined),
         vatPercent: effectiveVatPercent,
         servicePercent: service.servicePercent,
@@ -491,13 +501,13 @@ export async function POST(request, context) {
         withinTransaction: true,
         billId: settlement.billId,
         amount: settlement.refundDue,
-        method: normalizePaymentMethod(data.allocations?.[0]?.method || data.payment_method || 'cash'),
+        method: refundMethod,
         reason: 'Reopened bill — items removed / total reduced',
         actorId: auth.user.id,
       });
       // A refund is its own authoritative reversal. Keep the invoice face value
       // or every report that subtracts refunds would deduct this return twice.
-      await tx.run("UPDATE bills SET status='paid', payment_status='paid', outstanding_amount=0 WHERE id=?", [settlement.billId]);
+      await tx.run("UPDATE bills SET status=CASE WHEN LOWER(status)='refunded' THEN 'refunded' ELSE 'paid' END, payment_status='paid', outstanding_amount=0 WHERE id=?", [settlement.billId]);
       await recordAudit(tx, {
         bill_id: settlement.billId,
         event: 'reopen_refund_settled',

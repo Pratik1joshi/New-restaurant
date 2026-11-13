@@ -75,6 +75,7 @@ async function seedMissingDefaults(db) {
     { key: 'online_order_minimum_amount', value: '500' },
     { key: 'calendar_system', value: 'BS' },
     { key: 'payroll_absence_deductions_enabled', value: 'false' },
+    { key: 'payroll_food_credit_cap_enabled', value: 'false' },
     { key: 'cashier_expected_cash_schedule_enabled', value: 'true' },
     { key: 'cashier_expected_cash_reveal_time', value: '20:30' },
     { key: 'cashier_cash_count_schedule_enabled', value: 'false' },
@@ -153,7 +154,7 @@ export async function PUT(request) {
     if (data.cashier_cash_count_time != null && !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(data.cashier_cash_count_time))) {
       return NextResponse.json({ error: 'Cashier cash-count time must be a valid 24-hour time.' }, { status: 400 });
     }
-    const adminOnlyKeys = ['payroll_absence_deductions_enabled', 'cashier_expected_cash_schedule_enabled', 'cashier_expected_cash_reveal_time', 'cashier_cash_count_schedule_enabled', 'cashier_cash_count_time', 'kot_cancellation_approval_enabled'];
+    const adminOnlyKeys = ['payroll_absence_deductions_enabled', 'payroll_food_credit_cap_enabled', 'cashier_expected_cash_schedule_enabled', 'cashier_expected_cash_reveal_time', 'cashier_cash_count_schedule_enabled', 'cashier_cash_count_time', 'kot_cancellation_approval_enabled'];
     if (auth.user.role !== 'admin' && adminOnlyKeys.some((key) => key in data)) {
       return NextResponse.json({ error: 'Only an administrator can change protected operational controls.' }, { status: 403 });
     }

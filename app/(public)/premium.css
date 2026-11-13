@@ -468,6 +468,44 @@ textarea.rc-input { min-height: 80px; resize: vertical; }
 .rc-dish-fallback svg { width: 1.6rem; height: 1.6rem; opacity: .85; }
 .rc-dish-fallback span { font-size: .72rem; font-weight: 600; line-height: 1.15; }
 
+/* ------------------------------------------------------------ offers */
+.rc-offers { padding-block: clamp(3rem, 7vw, 5rem) 0; }
+.rc-offer-row { display: grid; grid-auto-flow: column; grid-auto-columns: min(84%, 340px); gap: 1rem; margin-inline: calc(var(--gutter) * -1); padding-inline: var(--gutter); overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding-inline: var(--gutter); overscroll-behavior-x: contain; scrollbar-width: none; }
+.rc-offer-row::-webkit-scrollbar { display: none; }
+.rc-offer-grid { display: grid; gap: 1.25rem; }
+@media (min-width: 640px) { .rc-offer-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 960px) {
+  .rc-offer-grid { grid-template-columns: repeat(3, 1fr); }
+  .rc-offer-row { grid-auto-flow: row; grid-template-columns: repeat(3, 1fr); margin-inline: 0; padding-inline: 0; overflow: visible; }
+}
+.rc-offer { position: relative; display: flex; flex-direction: column; overflow: hidden; scroll-snap-align: start; border: 1px solid var(--line); border-radius: 16px; background: var(--paper); }
+.rc-offer--featured { border-color: var(--kansa); box-shadow: 0 0 0 1px var(--kansa); }
+.rc-offer-media { position: relative; display: grid; place-items: center; aspect-ratio: 16 / 9; overflow: hidden; background: var(--wall); color: var(--on-wall); }
+.rc-offer-media img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.rc-offer-big { padding: 1rem; text-align: center; font-size: clamp(1.7rem, 5vw, 2.3rem); font-weight: 700; line-height: 1.05; letter-spacing: -0.02em; text-wrap: balance; }
+.rc-offer-tags { position: absolute; top: .75rem; left: .75rem; display: flex; flex-wrap: wrap; gap: .35rem; }
+.rc-offer-tag { padding: .25rem .6rem; border-radius: 999px; background: var(--paper); color: var(--dhuwa); font-size: .78rem; font-weight: 700; }
+.rc-offer-tag--gold { background: var(--kansa); color: #fff; }
+.rc-offer-body { display: flex; flex: 1; flex-direction: column; gap: .5rem; padding: 1.1rem 1.15rem 1.15rem; }
+.rc-offer-headline { color: var(--wall); font-size: 1.05rem; font-weight: 700; }
+.rc-offer-price { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem; }
+.rc-offer-price strong { color: var(--wall); font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+.rc-offer-price s { color: var(--muted); font-variant-numeric: tabular-nums; }
+.rc-offer-price span { padding: .1rem .5rem; border-radius: 999px; background: color-mix(in srgb, var(--saag) 14%, transparent); color: var(--saag); font-size: .82rem; font-weight: 700; }
+.rc-offer-body > p { color: var(--muted); font-size: .95rem; }
+.rc-offer-terms { display: grid; gap: .2rem; margin: 0; padding: 0; list-style: none; color: var(--dhuwa-soft); font-size: .9rem; }
+.rc-offer-terms li { display: flex; gap: .45rem; }
+.rc-offer-terms li::before { content: ''; flex: none; width: 5px; height: 5px; margin-top: .55em; border-radius: 50%; background: var(--kansa); }
+.rc-offer-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; margin-top: auto; padding-top: .6rem; }
+.rc-offer-code { display: inline-flex; align-items: center; gap: .45rem; min-height: 40px; padding: .35rem .75rem; border: 1.5px dashed var(--wall); border-radius: 10px; color: var(--wall); font: inherit; font-weight: 700; letter-spacing: .06em; cursor: pointer; }
+.rc-offer-code svg { width: .95rem; height: .95rem; }
+.rc-offer-auto { color: var(--saag); font-size: .88rem; font-weight: 600; }
+.rc-offer-section + .rc-offer-section { margin-top: clamp(3rem, 6vw, 4.5rem); }
+.rc-offer-section h2 { margin-bottom: 1.25rem; }
+.rc-coupon { display: grid; grid-template-columns: 1fr auto; gap: .5rem; margin-top: 1rem; }
+.rc-coupon .rc-btn { min-height: 50px; }
+.rc-summary-discount { color: var(--saag) !important; font-weight: 600; }
+
 /* ------------------------------------------------------- preferences */
 @media (pointer: coarse) {
   .rc-nav-links a, .rc-footer a { min-height: 44px; }

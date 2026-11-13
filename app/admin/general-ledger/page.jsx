@@ -8,6 +8,9 @@ import { apiJson } from '@/lib/authed-fetch';
 import LedgerTable, { money } from '@/components/accounting/ledger-table';
 import { formatNepalDate } from '@/lib/time-utils';
 import DateInput from '@/components/ui/date-input.jsx';
+import useServerList from '@/lib/use-server-list';
+import ListSearch from '@/components/ui/list-search';
+import PaginationControls from '@/components/ui/pagination-controls';
 
 const DEBIT_NORMAL = new Set(['asset', 'expense']);
 
@@ -17,9 +20,24 @@ export default function GeneralLedgerPage() {
   const [accounts, setAccounts] = useState([]);
   const [accountId, setAccountId] = useState('');
   const [range, setRange] = useState({ from: '', to: '' });
-  const [lines, setLines] = useState([]);
-  const [journals, setJournals] = useState([]);
-  const [loading, setLoading] = useState(false);
+
+  const onListError = (e) => addToast(friendlyFromError(e, 'load_failed'));
+  const ledger = useServerList({
+    url: '/api/admin/ledger',
+    key: 'lines',
+    filters: { view: 'ledger', account_id: accountId, from: range.from, to: range.to },
+    enabled: tab === 'ledger' && Boolean(accountId),
+    onError: onListError,
+  });
+  const journal = useServerList({
+    url: '/api/admin/ledger',
+    key: 'journals',
+    filters: { view: 'journal', from: range.from, to: range.to },
+    enabled: tab === 'journal',
+    onError: onListError,
+  });
+  const journals = journal.rows;
+  const active = tab === 'ledger' ? ledger : journal;
 
   useEffect(() => {
     apiJson('/api/admin/ledger?view=meta')
@@ -32,26 +50,10 @@ export default function GeneralLedgerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    if (tab !== 'ledger' || !accountId) return;
-    setLoading(true);
-    const q = new URLSearchParams({ view: 'ledger', account_id: accountId });
-    if (range.from) q.set('from', range.from);
-    if (range.to) q.set('to', range.to);
-    apiJson(`/api/admin/ledger?${q}`).then((d) => setLines(d.lines || [])).catch(() => setLines([])).finally(() => setLoading(false));
-  }, [tab, accountId, range]);
-
-  useEffect(() => {
-    if (tab !== 'journal') return;
-    setLoading(true);
-    const q = new URLSearchParams({ view: 'journal' });
-    if (range.from) q.set('from', range.from);
-    if (range.to) q.set('to', range.to);
-    apiJson(`/api/admin/ledger?${q}`).then((d) => setJournals(d.journals || [])).catch(() => setJournals([])).finally(() => setLoading(false));
-  }, [tab, range]);
-
   const account = accounts.find((a) => String(a.id) === String(accountId));
   const debitNormal = account ? DEBIT_NORMAL.has(account.type) : true;
+  const carried = ledger.extra.carried;
+  const opening = carried ? (debitNormal ? carried.debit - carried.credit : carried.credit - carried.debit) : 0;
 
   return (
     <AdminLayout>
@@ -79,15 +81,22 @@ export default function GeneralLedgerPage() {
           )}
           <label className="block"><span className="mb-1 block text-xs font-medium text-gray-500">From</span><DateInput value={range.from} onChange={(v) => setRange((r) => ({ ...r, from: v }))} className="h-10 rounded-lg border border-gray-300 px-3 text-sm" /></label>
           <label className="block"><span className="mb-1 block text-xs font-medium text-gray-500">To</span><DateInput value={range.to} onChange={(v) => setRange((r) => ({ ...r, to: v }))} className="h-10 rounded-lg border border-gray-300 px-3 text-sm" /></label>
+          <div className="min-w-[240px] flex-1">
+            <ListSearch key={tab} value={active.search} onSearch={active.setSearch} placeholder={tab === 'ledger' ? 'Search all postings for this account...' : 'Search all journals by number, memo or staff...'} />
+          </div>
         </div>
 
         {tab === 'ledger' ? (
           <>
             {account && <p className="text-sm text-gray-600">Balance: <span className="font-semibold text-gray-900">{money(account.balance)}</span></p>}
-            <LedgerTable lines={lines} debitNormal={debitNormal} loading={loading} empty="No postings for this account in range." />
+            <LedgerTable lines={ledger.rows} debitNormal={debitNormal} opening={opening} openingLabel="Carried from earlier pages" totals={ledger.extra.totals} loading={ledger.loading} empty={ledger.search ? 'No posting matches that search.' : 'No postings for this account in range.'} />
+            <PaginationControls {...ledger.pager} />
           </>
         ) : (
           <div className="space-y-3">
+            {journal.pagination.total > 0 && (
+              <p className="text-sm text-gray-600 tabular-nums">{journal.pagination.total.toLocaleString()} journal{journal.pagination.total === 1 ? '' : 's'} · Total posted <span className="font-semibold text-gray-900">{money(journal.extra.summary?.debit)}</span></p>
+            )}
             {journals.map((j) => (
               <div key={j.id} className="rounded-2xl border border-gray-200 bg-white p-4">
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -113,7 +122,8 @@ export default function GeneralLedgerPage() {
                 </table>
               </div>
             ))}
-            {!loading && journals.length === 0 && <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center text-gray-500">No journals in range.</div>}
+            {!journal.loading && journals.length === 0 && <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center text-gray-500">{journal.search ? 'No journal matches that search.' : 'No journals in range.'}</div>}
+            <PaginationControls {...journal.pager} />
           </div>
         )}
       </div>

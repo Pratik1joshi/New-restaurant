@@ -45,6 +45,13 @@ function looksDuplicated(suppliers) {
   return Array.from(groups.values()).filter((g) => g.length > 1);
 }
 
+const toRow = (s) => ({
+  ...s,
+  spend: Number(s.total_spend || 0),
+  purchases: Number(s.purchase_count || 0),
+  last_purchase: s.last_purchase_at || null,
+});
+
 export default function SuppliersPage() {
   const pathname = usePathname();
   const isCashierPanel = pathname?.startsWith('/cashier');
@@ -60,6 +67,8 @@ export default function SuppliersPage() {
 
   const {
     rows: suppliers,
+    extra,
+    pagination,
     server,
     loading,
     reload: fetchAll,
@@ -73,20 +82,15 @@ export default function SuppliersPage() {
   // Spend, purchase count and last delivery all arrive costed from SQL. This
   // used to pull 500 purchases and add them up here, which silently undercounted
   // any supplier past that cap.
-  const rows = useMemo(
-    () =>
-      suppliers.map((s) => ({
-        ...s,
-        spend: Number(s.total_spend || 0),
-        purchases: Number(s.purchase_count || 0),
-        last_purchase: s.last_purchase_at || null,
-      })),
-    [suppliers]
-  );
+  const rows = useMemo(() => suppliers.map(toRow), [suppliers]);
 
-  // Near-duplicate detection compares the names on this page only.
-  const duplicateGroups = useMemo(() => looksDuplicated(suppliers), [suppliers]);
-  const totalSpend = rows.reduce((s, r) => s + r.spend, 0);
+  // Duplicates and merges span pages, so these need every supplier, not this page.
+  const [allSuppliers, setAllSuppliers] = useState([]);
+  const listSize = pagination.total;
+  useEffect(() => {
+    apiJson('/api/admin/suppliers?export=1').then((body) => setAllSuppliers(body.suppliers || [])).catch(() => {});
+  }, [listSize]);
+  const duplicateGroups = useMemo(() => looksDuplicated(allSuppliers), [allSuppliers]);
 
   const columns = useMemo(
     () => [
@@ -140,9 +144,9 @@ export default function SuppliersPage() {
       <div className="space-y-5 bg-gray-50 p-4 sm:p-6 lg:p-8">
         <KpiCards
           kpis={[
-            { key: 'count', label: 'Suppliers', value: suppliers.length, format: 'number' },
-            { key: 'spend', label: 'Total spend', value: totalSpend, format: 'currency', sub: 'Excludes voided purchases' },
-            { key: 'active', label: 'Used this history', value: rows.filter((r) => r.purchases > 0).length, format: 'number' },
+            { key: 'count', label: 'Suppliers', value: extra.summary?.suppliers ?? 0, format: 'number' },
+            { key: 'spend', label: 'Total spend', value: extra.summary?.totalSpend ?? 0, format: 'currency', sub: 'Excludes voided purchases' },
+            { key: 'active', label: 'Used this history', value: extra.summary?.used ?? 0, format: 'number' },
             { key: 'dupes', label: 'Possible duplicates', value: duplicateGroups.reduce((s, g) => s + g.length, 0), format: 'number' },
           ]}
         />
@@ -192,7 +196,7 @@ export default function SuppliersPage() {
       {canManage && editing && <SupplierFormModal supplier={editing.id ? editing : null} onClose={() => setEditing(null)} onSaved={fetchAll} />}
       {canMerge && merging && (
         <MergeModal
-          candidates={rows.filter((r) => selected.includes(r.id))}
+          candidates={allSuppliers.filter((s) => selected.includes(s.id)).map(toRow)}
           onClose={() => setMerging(false)}
           onMerged={() => {
             setSelected([]);

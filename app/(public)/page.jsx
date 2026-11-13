@@ -7,6 +7,8 @@ import { getPublicMenuCategories } from '@/lib/public-menu';
 import { formatMenuPrice } from '@/lib/menu-format.js';
 import PaintedEdge from '@/components/public/painted-edge';
 import { RestaurantSchema } from '@/components/public/structured-data';
+import OfferCard from '@/components/public/offer-card';
+import { getPublicWebsiteOffers } from '@/lib/public-offers';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { alternates: { canonical: '/' } };
@@ -30,10 +32,11 @@ function Action({ href, className, children }) {
 
 export default async function HomePage() {
   const [home, contact, brand] = await Promise.all([getPublicHome(), getPublicContact(), getPublicBrand()]);
-  const [categories, gallery, festive] = await Promise.all([
+  const [categories, gallery, festive, offers] = await Promise.all([
     getPublicMenuCategories().catch(() => []),
     getPublicGallery().catch(() => ({ items: [] })),
     getPublicFestive().catch(() => ({ items: [] })),
+    getPublicWebsiteOffers().catch(() => []),
   ]);
   const sections = home.sections;
 
@@ -86,6 +89,23 @@ export default async function HomePage() {
           </div>
         </section>
       )}
+
+      {offers.length ? (
+        <section className="rc-offers" aria-labelledby="offers-title">
+          <div className="rc-wrap">
+            <div className="rc-section-head">
+              <div>
+                <h2 id="offers-title" className="rc-h2">Offers &amp; combos</h2>
+                <p className="rc-lead">What&apos;s on today. Order online or at the counter.</p>
+              </div>
+              <Link href="/offers" className="rc-link dsp-focus">{offers.length > 3 ? `See all ${offers.length} offers` : 'All offers'}</Link>
+            </div>
+            <div className="rc-offer-row">
+              {offers.slice(0, 3).map((offer) => <OfferCard key={offer.key} offer={offer} />)}
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       {festive.items.length ? (
         <section className="rc-festive" aria-label={festive.heading}>

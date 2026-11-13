@@ -14,11 +14,11 @@ export async function GET(request) {
     await ensureLedgerSchema(db);
 
     const q = new URL(request.url).searchParams;
-    const { rows, pagination } = await listSuppliers(db, {
+    const { rows, pagination, summary } = await listSuppliers(db, {
       ...readListParams(q, { defaultDir: 'asc' }),
       includeArchived: q.get('include_archived') === '1',
     });
-    return NextResponse.json({ suppliers: rows, pagination });
+    return NextResponse.json({ suppliers: rows, pagination, summary });
   } catch (error) {
     return handleRouteError(error, 'Failed to load suppliers');
   }

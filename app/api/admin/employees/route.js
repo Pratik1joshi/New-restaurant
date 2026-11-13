@@ -6,6 +6,7 @@ import { ensurePayrollSchema } from '@/lib/payroll.js';
 import { ensureHrmSchema } from '@/lib/hrm.js';
 import { salaryValue, saveSalaryTerm, payrollMonth } from '@/lib/payroll-months.js';
 import { requireAuth, handleRouteError } from '@/lib/api-guard.js';
+import { syncStaffCustomer } from '@/lib/staff-food-credit.js';
 
 export async function GET(request) {
   try {
@@ -20,6 +21,7 @@ export async function GET(request) {
     const employees = await db.all(`
       SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone, u.is_active, u.created_at,
              u.salary, u.absence_daily_rate, u.hire_date, u.position, u.department_id, u.designation_id,
+             COALESCE(u.can_login, 1) AS can_login,
              dep.name AS department_name, des.name AS designation_name
       FROM users u
       LEFT JOIN departments dep ON dep.id = u.department_id
@@ -50,7 +52,10 @@ export async function POST(request) {
     if (auth.error) return auth.error;
 
     const data = await request.json();
-    data.username = String(data.username || '').trim();
+    // Helpers, dishwashers etc. get payroll and food credit without any sign-in.
+    const canLogin = data.can_login !== false;
+    data.username = String(data.username || '').trim() || (canLogin ? '' : `staff-${Date.now().toString(36)}`);
+    if (!canLogin && data.role === 'admin') return NextResponse.json({ error: 'An administrator must be able to sign in.' }, { status: 400 });
     if (auth.user.role !== 'admin' && data.role === 'admin') {
       return NextResponse.json({ error: 'Only an administrator can create another administrator.' }, { status: 403 });
     }
@@ -68,20 +73,21 @@ export async function POST(request) {
     }
 
     if (!data.username || !String(data.full_name || '').trim()) return NextResponse.json({ error: 'Enter the staff name and username.' }, { status: 400 });
-    if (!/^[0-9]{4}$/.test(String(data.pin || ''))) return NextResponse.json({ error: 'Enter a four digit PIN.' }, { status: 400 });
+    if (canLogin && !/^[0-9]{4}$/.test(String(data.pin || ''))) return NextResponse.json({ error: 'Enter a four digit PIN.' }, { status: 400 });
     if (!['admin', 'cashier', 'waiter', 'kitchen'].includes(data.role)) return NextResponse.json({ error: 'Choose a valid staff role.' }, { status: 400 });
     const salary = salaryValue(data.salary);
     const dailyRate = salaryValue(data.absence_daily_rate, 'Daily absence deduction') ?? 0;
     const effectiveMonth = payrollMonth(data.salary_effective_month || undefined);
     if (effectiveMonth < payrollMonth()) return NextResponse.json({ error: 'Salary must start this month or a future month.' }, { status: 400 });
-    const hashedPassword = bcrypt.hashSync(String(data.pin), 10);
+    // '!' is not a bcrypt hash, so it can never match any PIN.
+    const hashedPassword = canLogin ? bcrypt.hashSync(String(data.pin), 10) : '!';
     const employee = await db.transaction(async (tx) => {
 
       const result = await tx.run(`
         INSERT INTO users (
           username, full_name, role, password_hash, email, phone, is_active,
-          salary, hire_date, position, department_id, designation_id, absence_daily_rate
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          salary, hire_date, position, department_id, designation_id, absence_daily_rate, can_login
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         data.username,
         data.full_name,
@@ -96,12 +102,14 @@ export async function POST(request) {
         data.department_id ? Number(data.department_id) : null,
         data.designation_id ? Number(data.designation_id) : null,
         dailyRate,
+        canLogin ? 1 : 0,
       ]);
 
       if (salary != null) await saveSalaryTerm(tx, result.lastInsertRowid, salary, effectiveMonth, auth.user.id);
+      await syncStaffCustomer(tx, result.lastInsertRowid);
       return tx.get(`
         SELECT id, username, full_name, role, email, phone, is_active, created_at,
-               salary, absence_daily_rate, hire_date, position, department_id, designation_id
+               salary, absence_daily_rate, hire_date, position, department_id, designation_id, can_login
         FROM users WHERE id = ?
       `, [result.lastInsertRowid]);
     });

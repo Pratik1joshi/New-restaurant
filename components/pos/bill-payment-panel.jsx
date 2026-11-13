@@ -147,7 +147,8 @@ export default function BillPaymentPanel({
       onConfirm({ error: check.message });
       return;
     }
-    if (paymentMethod === 'cash') {
+    // Nothing to collect on a reopened bill (same or lower total): no tender check.
+    if (paymentMethod === 'cash' && collectAmount > 0.009) {
       const tendered = parseFloat(amountPaid);
       if (!Number.isFinite(tendered) || tendered < collectAmount - 0.009) {
         onConfirm({ error: `Cash received must be at least ${formatCurrency(collectAmount)}.` });
@@ -384,6 +385,19 @@ export default function BillPaymentPanel({
                       ? 'Completing this will record the refund due from the reduced bill.'
                       : 'No money changes hands. Complete to close the revision.'}
                 </p>
+                {amountDue < -0.009 && (
+                  <div>
+                    <p className="mb-1.5 text-xs font-bold text-slate-900">Refund paid out by</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[{ id: 'cash', label: 'Cash from drawer', Icon: Wallet }, { id: 'online', label: 'Online / bank', Icon: QrCode }].map(({ id, label, Icon }) => (
+                        <button key={id} type="button" onClick={() => onPaymentMethodChange?.(id)}
+                          className={`flex items-center justify-center gap-1.5 rounded-xl border-2 p-2.5 text-xs font-bold transition-colors ${paymentMethod === id ? 'border-amber-600 bg-amber-600 text-white' : 'border-amber-200 bg-white text-slate-700 hover:border-amber-400'}`}>
+                          <Icon className="h-4 w-4" /> {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </>
             )}
           </div>

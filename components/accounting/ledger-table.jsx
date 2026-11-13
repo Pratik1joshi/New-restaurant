@@ -26,11 +26,13 @@ function withRunningBalance(lines, debitNormal, opening) {
   return { rows, closing: bal };
 }
 
-export default function LedgerTable({ lines = [], debitNormal = true, opening = 0, loading = false, empty = 'No entries.' }) {
+export default function LedgerTable({ lines = [], debitNormal = true, opening = 0, openingLabel = 'Opening balance', totals = null, loading = false, empty = 'No entries.' }) {
   const [selected, setSelected] = useState(null);
   const { rows, closing: bal } = withRunningBalance(lines, debitNormal, opening);
-  const totalDr = lines.reduce((s, l) => s + Number(l.debit || 0), 0);
-  const totalCr = lines.reduce((s, l) => s + Number(l.credit || 0), 0);
+  // `totals` covers every page when `lines` is only one page of the book.
+  const totalDr = totals ? Number(totals.debit || 0) : lines.reduce((s, l) => s + Number(l.debit || 0), 0);
+  const totalCr = totals ? Number(totals.credit || 0) : lines.reduce((s, l) => s + Number(l.credit || 0), 0);
+  const closing = totals ? (debitNormal ? totalDr - totalCr : totalCr - totalDr) : bal;
 
   return (
     <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
@@ -48,7 +50,7 @@ export default function LedgerTable({ lines = [], debitNormal = true, opening = 
           <tbody className="divide-y divide-gray-100">
             {opening !== 0 && (
               <tr className="bg-gray-50/60 text-gray-500">
-                <td className="px-4 py-2" colSpan={4}>Opening balance</td>
+                <td className="px-4 py-2" colSpan={4}>{openingLabel}</td>
                 <td className="px-4 py-2 text-right tabular-nums">{money(opening)}</td>
               </tr>
             )}
@@ -71,10 +73,10 @@ export default function LedgerTable({ lines = [], debitNormal = true, opening = 
           {rows.length > 0 && (
             <tfoot className="border-t border-gray-200 bg-gray-50 font-semibold text-gray-900">
               <tr>
-                <td className="px-4 py-3" colSpan={2}>Totals</td>
+                <td className="px-4 py-3" colSpan={2}>{totals ? 'Totals (all pages)' : 'Totals'}</td>
                 <td className="px-4 py-3 text-right tabular-nums">{money(totalDr)}</td>
                 <td className="px-4 py-3 text-right tabular-nums">{money(totalCr)}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{money(bal)}</td>
+                <td className="px-4 py-3 text-right tabular-nums">{money(closing)}</td>
               </tr>
             </tfoot>
           )}

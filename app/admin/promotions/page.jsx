@@ -7,6 +7,7 @@ import MenuItemImage from '@/components/menu-item-image'
 import { BadgePercent, CalendarDays, Loader2, Pencil, Plus, Power, Save, Star, Trash2, Upload, X } from 'lucide-react'
 import { formatCalendarDateTime } from '@/lib/calendar-system.js'
 import DateTimeInput from '@/components/ui/date-time-input.jsx'
+import { toNepalFormDateTime } from '@/lib/promotion-display.js'
 
 const emptyForm = () => ({
   name: '', code: '', description: '', offer_type: 'discount', discount_type: 'percent', discount_value: '', scope: 'order',
@@ -18,14 +19,6 @@ const emptyForm = () => ({
 const days = [['sun','Sun'],['mon','Mon'],['tue','Tue'],['wed','Wed'],['thu','Thu'],['fri','Fri'],['sat','Sat']]
 const money = (value) => `Rs. ${Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
 
-/** DB datetimes → YYYY-MM-DDTHH:mm for DateTimeInput. */
-function toFormDateTime(value) {
-  if (!value) return ''
-  const raw = String(value).trim().replace(' ', 'T')
-  const match = raw.match(/^(\d{4}-\d{2}-\d{2})T?(\d{2}:\d{2})?/)
-  if (!match) return ''
-  return `${match[1]}T${match[2] || '00:00'}`
-}
 
 function promoToForm(promo) {
   return {
@@ -41,8 +34,8 @@ function promoToForm(promo) {
     reward_discount_percent: promo.reward_discount_percent ?? 100,
     minimum_order_amount: promo.minimum_order_amount ? String(promo.minimum_order_amount) : '',
     maximum_discount_amount: promo.maximum_discount_amount != null ? String(promo.maximum_discount_amount) : '',
-    starts_at: toFormDateTime(promo.starts_at),
-    ends_at: toFormDateTime(promo.ends_at),
+    starts_at: toNepalFormDateTime(promo.starts_at),
+    ends_at: toNepalFormDateTime(promo.ends_at),
     days_of_week: Array.isArray(promo.days_of_week) ? promo.days_of_week : [],
     daily_start_time: promo.daily_start_time || '',
     daily_end_time: promo.daily_end_time || '',

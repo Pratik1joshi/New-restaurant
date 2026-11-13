@@ -67,6 +67,7 @@ export default function SettingsPage() {
     restaurant_name: '', legal_name: '', owner_name: '', restaurant_phone: '', restaurant_email: '',
     calendar_system: 'BS',
     payroll_absence_deductions_enabled: false,
+    payroll_food_credit_cap_enabled: false,
     website: '', vat_number: '', pan_number: '', registration_number: '', restaurant_address: '',
     vat_percentage: 13, service_charge_percentage: 10,
     receipt_footer: '', receipt_paper_size: '80', qr_ordering_enabled: true, online_order_minimum_amount: 500,
@@ -105,6 +106,7 @@ export default function SettingsPage() {
           try { deliveryBands = JSON.parse(d.delivery_distance_bands || '[]'); } catch { deliveryBands = []; }
           set({
             payroll_absence_deductions_enabled: String(d.payroll_absence_deductions_enabled) === 'true',
+            payroll_food_credit_cap_enabled: String(d.payroll_food_credit_cap_enabled) === 'true',
             restaurant_name: d.restaurant_name || '', legal_name: d.legal_name || '', owner_name: d.owner_name || '',
             restaurant_phone: d.restaurant_phone || '', restaurant_email: d.restaurant_email || '', website: d.website || '',
             vat_number: d.vat_number || '', pan_number: d.pan_number || '', registration_number: d.registration_number || '',
@@ -168,6 +170,7 @@ export default function SettingsPage() {
           ...s,
           ...(currentUser?.role === 'admin' ? {
             payroll_absence_deductions_enabled: s.payroll_absence_deductions_enabled ? 'true' : 'false',
+            payroll_food_credit_cap_enabled: s.payroll_food_credit_cap_enabled ? 'true' : 'false',
             cashier_expected_cash_schedule_enabled: s.cashier_expected_cash_schedule_enabled ? 'true' : 'false',
             cashier_expected_cash_reveal_time: s.cashier_expected_cash_reveal_time,
             cashier_cash_count_schedule_enabled: s.cashier_cash_count_schedule_enabled ? 'true' : 'false',
@@ -175,6 +178,7 @@ export default function SettingsPage() {
             kot_cancellation_approval_enabled: s.kot_cancellation_approval_enabled ? 'true' : 'false',
           } : {
             payroll_absence_deductions_enabled: undefined,
+            payroll_food_credit_cap_enabled: undefined,
             cashier_expected_cash_schedule_enabled: undefined,
             cashier_expected_cash_reveal_time: undefined,
             cashier_cash_count_schedule_enabled: undefined,
@@ -447,6 +451,13 @@ export default function SettingsPage() {
                 <label className="flex items-center justify-between gap-4 rounded-lg border border-gray-200 p-4">
                   <span className="text-sm font-medium text-gray-800">Enable absence deductions</span>
                   <input type="checkbox" checked={s.payroll_absence_deductions_enabled} onChange={(e) => set({ payroll_absence_deductions_enabled: e.target.checked })} className="h-5 w-5 rounded border-gray-300" />
+                </label>
+                <label className="mt-3 flex items-center justify-between gap-4 rounded-lg border border-gray-200 p-4">
+                  <span>
+                    <span className="block text-sm font-medium text-gray-800">Limit staff food credit to remaining salary</span>
+                    <span className="mt-0.5 block text-xs text-gray-500">When on, POS blocks a staff credit bill that would take their food credit above what is left of this month&apos;s salary.</span>
+                  </span>
+                  <input type="checkbox" checked={s.payroll_food_credit_cap_enabled} onChange={(e) => set({ payroll_food_credit_cap_enabled: e.target.checked })} className="h-5 w-5 shrink-0 rounded border-gray-300" />
                 </label>
               </Panel>
             )}

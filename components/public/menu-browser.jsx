@@ -68,6 +68,11 @@ export default function MenuBrowser({ categories, whatsappNumber, deliveryPricin
   const [placed, setPlaced] = useState(null);
   const [orderErr, setOrderErr] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
+  // Offer preview: the server re-prices on order, this only shows the same answer early.
+  const [couponInput, setCouponInput] = useState('');
+  const [coupon, setCoupon] = useState('');
+  const [couponErr, setCouponErr] = useState('');
+  const [promotion, setPromotion] = useState(null);
   const idempotencyRef = useRef(null);
   const inFlightRef = useRef(false);
   const nameRef = useRef(null);
@@ -85,6 +90,33 @@ export default function MenuBrowser({ categories, whatsappNumber, deliveryPricin
   useEffect(() => {
     try { localStorage.setItem(CART_KEY, JSON.stringify(cart)); } catch { /* ignore */ }
   }, [cart]);
+
+  // "Order with this code" on the offers page lands here as ?coupon=CODE.
+  useEffect(() => {
+    const code = new URLSearchParams(window.location.search).get('coupon');
+    if (code) { setCouponInput(code.toUpperCase()); setCoupon(code.toUpperCase()); }
+  }, []);
+
+  const cartKey = cart.map((l) => `${l.key}x${l.qty}`).join('|');
+  useEffect(() => {
+    if (!cart.length) { setPromotion(null); return undefined; }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch('/api/public/promotions/preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ channel: 'website', coupon_code: coupon || undefined, items: cart.map((l) => ({ menu_item_id: l.id, variant_name: l.variant, quantity: l.qty })) }),
+        });
+        const j = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        if (res.ok) { setPromotion(j.promotion || null); setCouponErr(''); }
+        else if (coupon && res.status === 400) { setPromotion(null); setCouponErr('This code does not apply to this order yet.'); }
+      } catch { /* the order itself still prices correctly */ }
+    }, 350);
+    return () => { cancelled = true; clearTimeout(timer); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- cartKey stands for cart
+  }, [cartKey, coupon]);
 
   // The open sheet owns the screen: lock page scroll and let Escape close it.
   useEffect(() => {
@@ -148,6 +180,7 @@ export default function MenuBrowser({ categories, whatsappNumber, deliveryPricin
           delivery_band_id: deliveryBandId || undefined,
           delivery_distance_km: deliveryDistanceKm || undefined,
           idempotency_key: idempotencyRef.current,
+          coupon_code: coupon && !couponErr ? coupon : undefined,
           items: cart.map((l) => ({ menu_item_id: l.id, variant_name: l.variant, quantity: l.qty })),
         }),
       });
@@ -172,6 +205,7 @@ export default function MenuBrowser({ categories, whatsappNumber, deliveryPricin
         if (j.field === 'phone') phoneRef.current?.focus();
         if (j.field === 'delivery_address') locationRef.current?.focus();
         if (j.field === 'delivery_range' || j.field === 'delivery_distance_km') deliveryRangeRef.current?.focus();
+        if (j.field === 'coupon_code') setCouponErr(j.error);
       }
     } catch {
       whatsappWindow?.close();
@@ -189,7 +223,8 @@ export default function MenuBrowser({ categories, whatsappNumber, deliveryPricin
     : deliveryPricing.mode === 'fixed' ? Number(deliveryPricing.fixedFee || 0)
       : deliveryPricing.mode === 'distance_bands' ? Number(selectedBand?.fee || 0)
         : Math.max(Number(deliveryPricing.minimumFee || 0), Number(deliveryDistanceKm || 0) * Number(deliveryPricing.perKmRate || 0));
-  const payableTotal = cartTotal + deliveryFee;
+  const discount = Math.min(cartTotal, Number(promotion?.discount || 0));
+  const payableTotal = cartTotal - discount + deliveryFee;
 
   const q = query.trim().toLowerCase();
   const searching = q.length > 0;
@@ -260,7 +295,7 @@ export default function MenuBrowser({ categories, whatsappNumber, deliveryPricin
 
       {cartCount > 0 && !cartOpen ? (
         <button type="button" onClick={() => setCartOpen(true)} className="rc-cart-button dsp-focus">
-          <span>{cartCount} {cartCount === 1 ? 'item' : 'items'} · {formatMenuPrice(cartTotal)}</span>
+          <span>{cartCount} {cartCount === 1 ? 'item' : 'items'} · {formatMenuPrice(cartTotal - discount)}</span>
           <span><ShoppingBag aria-hidden="true" />View order</span>
         </button>
       ) : null}
@@ -338,8 +373,21 @@ export default function MenuBrowser({ categories, whatsappNumber, deliveryPricin
                       <textarea value={customerNote} onChange={(e) => setCustomerNote(e.target.value)} placeholder="Note for the kitchen (optional)" aria-label="Note for the kitchen" rows={2} className="rc-input dsp-focus" />
                     </div>
 
+                    <form className="rc-coupon" onSubmit={(e) => { e.preventDefault(); setCouponErr(''); setCoupon(couponInput.trim().toUpperCase()); }}>
+                      <input value={couponInput} onChange={(e) => setCouponInput(e.target.value.toUpperCase())} placeholder="Offer code (optional)" aria-label="Offer code" className="rc-input dsp-focus" autoCapitalize="characters" />
+                      {coupon && coupon === couponInput.trim() ? (
+                        <button type="button" className="rc-btn rc-btn--ghost dsp-focus" onClick={() => { setCoupon(''); setCouponInput(''); setCouponErr(''); }}>Remove</button>
+                      ) : (
+                        <button type="submit" className="rc-btn rc-btn--ghost dsp-focus" disabled={!couponInput.trim()}>Apply</button>
+                      )}
+                    </form>
+                    {couponErr ? <p className="rc-input-error" role="alert">{couponErr}</p> : null}
+
                     <div className="rc-summary">
                       <div><span>Items</span><span>{formatMenuPrice(cartTotal)}</span></div>
+                      {discount > 0 ? (
+                        <div className="rc-summary-discount"><span>{promotion.name}{promotion.code ? ` · ${promotion.code}` : ''}</span><span>− {formatMenuPrice(discount)}</span></div>
+                      ) : null}
                       {orderType === 'delivery' ? (
                         <div><span style={{ display: 'inline-flex', alignItems: 'center', gap: '.35rem' }}><Truck style={{ width: '.95rem', height: '.95rem' }} aria-hidden="true" />Delivery</span><span>{deliveryPricing.enabled ? (deliveryFee > 0 ? formatMenuPrice(deliveryFee) : selectedBand || deliveryPricing.mode === 'fixed' ? 'Free' : 'Choose distance') : 'Free'}</span></div>
                       ) : null}

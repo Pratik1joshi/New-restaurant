@@ -3,7 +3,8 @@ import Database from '@/lib/db/index';
 import { requireAuth, handleRouteError } from '@/lib/api-guard.js';
 import { accountBalance, ensureAccountingSchema } from '@/lib/accounting.js';
 import { listBankAccounts } from '@/lib/accounting-cash.js';
-import { supplierPayables, supplierStatement, supplierLedgerHistory, liabilityLedger, liabilityAgeing, paySupplier, supplierOpenInvoices } from '@/lib/accounting-suppliers.js';
+import { readListParams } from '@/lib/paginate.js';
+import { supplierPayables, supplierPayablesPage, supplierStatement, supplierLedgerHistoryPage, liabilityLedger, liabilityAgeing, paySupplier, supplierOpenInvoices } from '@/lib/accounting-suppliers.js';
 
 export async function GET(request) {
   try {
@@ -14,10 +15,17 @@ export async function GET(request) {
     const q = new URL(request.url).searchParams;
 
     if (q.get('view') === 'history') {
-      const history = await supplierLedgerHistory(db, {
-        from: q.get('from'), to: q.get('to'), status: q.get('status') || 'all', search: q.get('search'),
+      const { page, pageSize, exportAll, search } = readListParams(q);
+      const { rows, pagination, summary } = await supplierLedgerHistoryPage(db, {
+        from: q.get('from'), to: q.get('to'), status: q.get('status') || 'all', search, page, pageSize, exportAll,
       });
-      return NextResponse.json({ history });
+      return NextResponse.json({ history: rows, pagination, summary });
+    }
+
+    if (q.get('view') === 'payables') {
+      const { page, pageSize, exportAll, search } = readListParams(q);
+      const { rows, pagination, summary } = await supplierPayablesPage(db, { search, page, pageSize, exportAll });
+      return NextResponse.json({ payables: rows, pagination, summary });
     }
 
     const supplierId = q.get('supplier_id');

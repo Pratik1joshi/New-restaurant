@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import AdminLayout from '@/components/admin/admin-layout';
-import { Search, X, Building2, ExternalLink, Wallet, ShieldAlert, ChevronRight, Printer } from 'lucide-react';
+import { X, Building2, ExternalLink, Wallet, ShieldAlert, ChevronRight, Printer } from 'lucide-react';
 import { printCreditStatement } from '@/lib/pos-print';
 import { useToast } from '@/components/ui/toast';
 import { friendlyMessage, friendlyFromError } from '@/lib/friendly-message';
@@ -14,6 +14,9 @@ import { adminInputClass } from '@/components/ui/admin-form';
 import DateInput from '@/components/ui/date-input.jsx';
 import { resolvePeriodRange, formatNepalDisplay } from '@/lib/report-dates';
 import { useCalendarSystem } from '@/lib/calendar-context.jsx';
+import useServerList from '@/lib/use-server-list';
+import ListSearch from '@/components/ui/list-search';
+import PaginationControls from '@/components/ui/pagination-controls';
 
 const PERIODS = [
   { id: 'all', label: 'All Time' },
@@ -35,21 +38,35 @@ export default function AccountsPayablePage() {
   const { addToast } = useToast();
 
   const [overview, setOverview] = useState({ payables: [], ageing: [], liabilities: [], banks: [], business_funding_available: 0 });
-  const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState({});
 
   const [period, setPeriod] = useState('all');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
-  const [query, setQuery] = useState('');
   const [tab, setTab] = useState('outstanding');
   const [historyPeriod, setHistoryPeriod] = useState('today');
   const [historyFrom, setHistoryFrom] = useState('');
   const [historyTo, setHistoryTo] = useState('');
   const [historyStatus, setHistoryStatus] = useState('all');
-  const [historyQuery, setHistoryQuery] = useState('');
-  const [history, setHistory] = useState([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
+
+  const onListError = (error) => addToast(friendlyFromError(error, 'load_failed'));
+  const dues = useServerList({
+    url: '/api/admin/accounts-payable',
+    key: 'payables',
+    filters: { view: 'payables' },
+    enabled: tab === 'outstanding',
+    onError: onListError,
+  });
+  const historyList = useServerList({
+    url: '/api/admin/accounts-payable',
+    key: 'history',
+    filters: { view: 'history', status: historyStatus, from: historyFrom, to: historyTo },
+    enabled: tab === 'history',
+    onError: onListError,
+  });
+  const visibleSuppliers = dues.rows;
+  const history = historyList.rows;
+  const historyLoading = historyList.loading && history.length === 0;
 
   const [selected, setSelected] = useState(null); // { id, name, phone? }
   const [detail, setDetail] = useState({ invoices: [], statement: [] });
@@ -65,7 +82,6 @@ export default function AccountsPayablePage() {
   const load = async () => {
     try { setOverview(await apiJson('/api/admin/accounts-payable')); }
     catch (error) { addToast(friendlyFromError(error, 'load_failed')); }
-    finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -91,22 +107,9 @@ export default function AccountsPayablePage() {
   const editHistoryTo = (v) => { setHistoryTo(v); setHistoryPeriod('custom'); };
 
   useEffect(() => {
-    if (tab !== 'history') return;
-    if (!historyFrom && !historyTo && historyPeriod !== 'all') { chooseHistoryPeriod(historyPeriod); return; }
-    (async () => {
-      setHistoryLoading(true);
-      try {
-        const params = new URLSearchParams({ view: 'history', status: historyStatus });
-        if (historyFrom) params.set('from', historyFrom);
-        if (historyTo) params.set('to', historyTo);
-        if (historyQuery.trim()) params.set('search', historyQuery.trim());
-        const data = await apiJson(`/api/admin/accounts-payable?${params}`);
-        setHistory(data.history || []);
-      } catch (error) { addToast(friendlyFromError(error, 'load_failed')); }
-      finally { setHistoryLoading(false); }
-    })();
+    if (tab === 'history' && !historyFrom && !historyTo && historyPeriod !== 'all') chooseHistoryPeriod(historyPeriod);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, historyFrom, historyTo, historyStatus, historyQuery]);
+  }, [tab]);
 
   const openSupplier = (s) => { setSelected(s); setSelectedInvoice(null); };
   const closeSupplier = () => { setSelected(null); setDetail({ invoices: [], statement: [] }); setSelectedInvoice(null); };
@@ -187,17 +190,12 @@ export default function AccountsPayablePage() {
       setPayFor(null);
       setSelectedInvoice(null);
       load();
+      dues.reload();
+      historyList.reload();
       setSelected((prev) => (prev ? { ...prev } : prev)); // retrigger detail refetch
     } catch (error) { addToast(friendlyFromError(error, 'save_failed')); }
     finally { setBusy(false); }
   };
-
-  const visibleSuppliers = useMemo(() => {
-    const list = overview.payables || [];
-    const q = query.trim().toLowerCase();
-    if (!q) return list;
-    return list.filter((s) => s.name?.toLowerCase().includes(q));
-  }, [overview.payables, query]);
 
   return (
     <AdminLayout>
@@ -249,13 +247,10 @@ export default function AccountsPayablePage() {
                   </select>
                 </label>
               </div>
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                <input value={historyQuery} onChange={(e) => setHistoryQuery(e.target.value)} placeholder="Search by supplier name..." className={`${INPUT} pl-9`} />
-              </div>
+              <ListSearch value={historyList.search} onSearch={historyList.setSearch} placeholder="Search all history by supplier, phone or memo..." />
             </div>
 
-            <Panel title={`Ledger history (${history.length})`}>
+            <Panel title={`Ledger history (${historyList.pagination.total.toLocaleString()}) · Charged ${money(historyList.extra.summary?.charged)} · Paid ${money(historyList.extra.summary?.paid)}`}>
               <div className="divide-y divide-gray-100">
                 {historyLoading ? (
                   <p className="px-5 py-8 text-center text-sm text-gray-500">Loading…</p>
@@ -275,6 +270,7 @@ export default function AccountsPayablePage() {
                 ))}
               </div>
             </Panel>
+            <PaginationControls {...historyList.pager} />
           </div>
         ) : (
         <>
@@ -308,27 +304,19 @@ export default function AccountsPayablePage() {
             </label>
           </div>
 
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search supplier by name..."
-              className={`${INPUT} pl-9`}
-            />
-          </div>
+          <ListSearch value={dues.search} onSearch={dues.setSearch} placeholder="Search all suppliers by name or phone..." />
         </div>
 
-        {!loading && visibleSuppliers.length === 0 ? (
+        {!dues.loading && visibleSuppliers.length === 0 ? (
           <div className="rounded-2xl border border-gray-200 bg-white px-6 py-16 text-center">
             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-100">
               <Building2 className="h-6 w-6 text-gray-400" />
             </div>
-            <h3 className="text-base font-bold text-gray-900">{query ? 'No match' : 'No Outstanding Payables'}</h3>
+            <h3 className="text-base font-bold text-gray-900">{dues.search ? 'No match' : 'No Outstanding Payables'}</h3>
             <p className="mx-auto mt-1 max-w-sm text-sm text-gray-500">
-              {query ? 'No supplier matches that search.' : "You don't owe any supplier anything right now."}
+              {dues.search ? 'No supplier matches that search.' : "You don't owe any supplier anything right now."}
             </p>
-            {!query && (
+            {!dues.search && (
               <div className="mx-auto mt-6 flex max-w-md flex-col items-center gap-2 sm:flex-row sm:justify-center">
                 <span className="inline-flex items-center gap-2 rounded-full bg-gray-50 px-4 py-2 text-xs font-medium text-gray-600"><Wallet className="h-3.5 w-3.5" />Track payments</span>
                 <span className="inline-flex items-center gap-2 rounded-full bg-gray-50 px-4 py-2 text-xs font-medium text-gray-600"><ShieldAlert className="h-3.5 w-3.5" />Monitor dues</span>
@@ -336,7 +324,8 @@ export default function AccountsPayablePage() {
             )}
           </div>
         ) : (
-          <Panel title={`Suppliers with dues (${visibleSuppliers.length})`}>
+          <>
+          <Panel title={`Suppliers with dues (${dues.pagination.total.toLocaleString()}) · ${money(dues.extra.summary?.owed)}`}>
             <div className="divide-y divide-gray-100">
               {visibleSuppliers.map((s) => (
                 <div
@@ -358,6 +347,8 @@ export default function AccountsPayablePage() {
               ))}
             </div>
           </Panel>
+          <PaginationControls {...dues.pager} />
+          </>
         )}
         </>
         )}

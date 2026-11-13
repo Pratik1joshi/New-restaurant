@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { BanknoteArrowDown, Plus, Trash2, X } from 'lucide-react';
+import { BanknoteArrowDown, ChevronDown, Plus, Trash2, Utensils, X } from 'lucide-react';
+import FoodCreditActions from '@/components/staff/food-credit-actions';
 import { useToast } from '@/components/ui/toast';
 import { useConfirm } from '@/components/ui/confirm';
 import { friendlyMessage, friendlyFromError } from '@/lib/friendly-message';
@@ -44,6 +45,7 @@ export default function PayrollDrawer({
   const [payment, setPayment] = useState({
     gross_amount: employee.salary ?? '',
     advance_deduction: '',
+    food_deduction: '',
     period_label: currentPeriod(),
     salary_month: today().slice(0, 7),
     paid_on: today(),
@@ -61,7 +63,9 @@ export default function PayrollDrawer({
       setDetails(data);
       const remaining = Number(data.statement?.remaining || 0);
       const settlement = Math.max(0, Math.min(Number(data.outstanding || 0), Number(data.statement?.available_for_advance_settlement || 0)));
-      setPayment((v) => ({ ...v, gross_amount: remaining + settlement, advance_deduction: settlement, salary_month: month, period_label: month }));
+      // Food credit is taken out of the salary still to pay, never beyond it.
+      const food = Math.max(0, Math.min(Number(data.food_credit?.outstanding || 0), remaining));
+      setPayment((v) => ({ ...v, gross_amount: round2(remaining + settlement), advance_deduction: settlement, food_deduction: round2(food), salary_month: month, period_label: month }));
       setPayments(data.payments || []);
       setAdvances(data.advances || []);
       setOutstanding(Number(data.outstanding || 0));
@@ -74,15 +78,17 @@ export default function PayrollDrawer({
 
   useEffect(() => {
     setAction(allowedInitialAction);
-    setPayment((current) => ({ ...current, gross_amount: employee.salary ?? '', advance_deduction: '' }));
+    setPayment((current) => ({ ...current, gross_amount: employee.salary ?? '', advance_deduction: '', food_deduction: '' }));
     load();
     return () => { loadVersion.current += 1; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [employee.id, initialAction, month]);
 
   const deduction = Math.max(0, Number(payment.advance_deduction || 0));
+  const foodDeduction = Math.max(0, Number(payment.food_deduction || 0));
+  const foodOutstanding = Number(details?.food_credit?.outstanding || 0);
   const gross = Math.max(0, Number(payment.gross_amount || 0));
-  const netPay = Math.max(0, gross - deduction);
+  const netPay = Math.max(0, round2(gross - deduction - foodDeduction));
   const totalPaid = useMemo(
     () => payments.reduce((sum, row) => sum + Number(row.gross_amount ?? row.amount ?? 0), 0),
     [payments]
@@ -113,6 +119,9 @@ export default function PayrollDrawer({
     if (deduction > outstanding || deduction > gross) {
       return addToast(friendlyMessage('validation', { description: 'Advance deduction cannot exceed the salary or outstanding advance.' }));
     }
+    if (foodDeduction > foodOutstanding + 0.001 || round2(deduction + foodDeduction) > gross) {
+      return addToast(friendlyMessage('validation', { description: 'Food credit deduction cannot exceed the food credit due or the salary.' }));
+    }
     setSaving(true);
     try {
       const saved = await savePayroll('payment', {
@@ -120,11 +129,12 @@ export default function PayrollDrawer({
           employee_id: employee.id,
           gross_amount: gross,
           advance_deduction: deduction,
+          food_deduction: foodDeduction,
           amount: netPay,
       });
       if (!saved) return;
       addToast(friendlyMessage('save_success', { description: 'Salary payment recorded.' }));
-      setPayment((current) => ({ ...current, note: '', advance_deduction: '' }));
+      setPayment((current) => ({ ...current, note: '', advance_deduction: '', food_deduction: '' }));
       await load();
     } catch (error) {
       addToast(friendlyFromError(error, 'save_failed'));
@@ -200,7 +210,9 @@ export default function PayrollDrawer({
             {[
               ['Opening balance', details.statement.opening], ['Monthly salary', details.statement.salary],
               ['Advances given this month', -details.statement.advanced], ['Absence deductions', -details.statement.absences],
-              ['Salary paid for this month', -details.statement.paid], ['Deductions waived', details.statement.waived],
+              ['Salary paid for this month', -details.statement.paid],
+              ...(Number(details.statement.food_deducted) > 0 ? [['Food credit deducted', -details.statement.food_deducted]] : []),
+              ['Deductions waived', details.statement.waived],
             ].map(([label, value]) => <div key={label} className="flex justify-between gap-3 py-1"><span>{label}</span><span>{money(value)}</span></div>)}
             <div className="mt-3 flex justify-between border-t pt-3 font-bold"><span>{details.statement.balance < 0 ? 'Deduction carried to next month' : 'Remaining salary to pay'}</span><span>{money(Math.abs(details.statement.balance))}</span></div>
           </section>}
@@ -208,8 +220,10 @@ export default function PayrollDrawer({
             <Stat label="Monthly salary" value={details?.statement ? money(details.statement.salary) : '—'} />
             <Stat label="Advance due" value={money(outstanding)} tone={outstanding > 0 ? 'amber' : 'default'} />
             <Stat label="Salary recorded" value={money(totalPaid)} />
-            <Stat label="Advance records" value={String(advances.length)} />
+            <Stat label="Food credit due" value={details?.food_credit ? money(foodOutstanding) : '—'} tone={foodOutstanding > 0 ? 'amber' : 'default'} />
           </div>
+
+          <FoodCreditSection details={details} employee={employee} loading={loading} onChanged={load} />
 
           {(canRecordSalary || canGiveAdvance) && (
             <div className="rounded-xl border border-gray-200 p-4">
@@ -227,6 +241,7 @@ export default function PayrollDrawer({
                   <div className="grid grid-cols-2 gap-3">
                     <Field label="Salary settled (Rs)"><input type="number" min="0" step="any" value={payment.gross_amount} onChange={(e) => setPayment({ ...payment, gross_amount: e.target.value })} className={INPUT} /></Field>
                     <Field label={`Advance deduction (due ${money(outstanding)})`}><input type="number" min="0" max={Math.min(gross, outstanding)} step="any" value={payment.advance_deduction} onChange={(e) => setPayment({ ...payment, advance_deduction: e.target.value })} className={INPUT} placeholder="0" /></Field>
+                    {details?.food_credit && <Field label={`Food credit deduction (due ${money(foodOutstanding)})`}><input type="number" min="0" max={Math.min(gross, foodOutstanding)} step="any" value={payment.food_deduction} onChange={(e) => setPayment({ ...payment, food_deduction: e.target.value })} className={INPUT} placeholder="0" /></Field>}
                     <Field label="Paid on"><DateInput value={payment.paid_on} onChange={(v) => setPayment({ ...payment, paid_on: v })} className={INPUT} /></Field>
                     <Field label="Salary month (AD)"><input type="month" required value={payment.salary_month} readOnly className={INPUT} /><span className="text-xs text-gray-500">Select the month above to update the calculation.</span></Field>
                     <Field label="Method"><select value={payment.method} onChange={(e) => setPayment({ ...payment, method: e.target.value })} className={INPUT}>{METHODS.map((method) => <option key={method} value={method}>{methodLabel(method)}</option>)}</select></Field>
@@ -289,6 +304,7 @@ export default function PayrollDrawer({
                 <div className="flex items-center gap-2">
                   {Number(row.funding_amount) > 0 && <span className="text-xs text-emerald-700">{money(row.funding_amount)} from Business Funding</span>}
                   {Number(row.advance_deduction || 0) > 0 && <span className="text-xs text-amber-700">{money(row.advance_deduction)} deducted</span>}
+                  {Number(row.food_deduction || 0) > 0 && <span className="text-xs text-indigo-700">{money(row.food_deduction)} food credit</span>}
                   {canDelete && <DeleteButton onClick={() => remove(row.id, 'payment')} />}
                 </div>
               </HistoryRow>
@@ -297,6 +313,49 @@ export default function PayrollDrawer({
         </div>
       </aside>
     </div>, document.body
+  );
+}
+
+const round2 = (n) => Math.round(Number(n || 0) * 100) / 100;
+
+function FoodCreditSection({ details, employee, loading, onChanged }) {
+  const [open, setOpen] = useState(false);
+  if (loading && !details) return null;
+  const account = details?.food_credit;
+  if (!account) {
+    return <section className="rounded-xl border border-dashed border-gray-300 p-4 text-sm text-gray-600">
+      <p className="flex items-center gap-2 font-semibold text-gray-900"><Utensils className="h-4 w-4" /> Food credit</p>
+      <p className="mt-1">Not set up. Add a 10-digit phone number on the staff record to link a customer account, then charge food on credit at POS.</p>
+    </section>;
+  }
+  const bills = details.food_bills || [];
+  return (
+    <section className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4 text-sm text-gray-900">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="flex items-center gap-2 font-semibold"><Utensils className="h-4 w-4 text-indigo-700" /> Food credit</p>
+          <p className="mt-0.5 text-xs text-gray-600">POS customer: {account.customer_name} · {account.phone}. Charge food on credit to this customer at POS.</p>
+          {details.food_cap_enabled && <p className="mt-0.5 text-xs text-indigo-800">Limit on: food credit cannot go above this month&apos;s remaining salary.</p>}
+        </div>
+        <p className="shrink-0 text-right"><span className="block text-xs text-gray-500">Due</span><span className="text-base font-bold">{money(account.outstanding)}</span></p>
+      </div>
+      {bills.length > 0 && <>
+        <button type="button" onClick={() => setOpen(!open)} className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-indigo-800">
+          <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`} /> {bills.length} open food bill{bills.length === 1 ? '' : 's'}
+        </button>
+        {open && <div className="mt-2 divide-y divide-indigo-100 rounded-lg border border-indigo-100 bg-white">
+          {bills.map((bill) => <div key={bill.id} className="px-3 py-2">
+            <div className="flex justify-between gap-2 text-xs font-semibold"><span>{bill.bill_number} · {formatCalendarDate(String(bill.created_at).slice(0, 10))}</span><span>{money(bill.outstanding_amount)} due</span></div>
+            <p className="mt-0.5 text-xs text-gray-500">{(bill.items || []).map((item) => `${Number(item.quantity)}× ${item.item_name}${item.variant_name ? ` (${item.variant_name})` : ''}`).join(', ') || 'No item details'}</p>
+          </div>)}
+        </div>}
+      </>}
+      {account.outstanding > 0 && <div className="mt-3 border-t border-indigo-100 pt-3">
+        <p className="mb-2 text-xs text-gray-600">Normally deducted when you record salary below. If {employee.full_name || employee.username} paid separately, or the owner forgives it:</p>
+        <FoodCreditActions size="sm" customerId={account.customer_id} staffName={employee.full_name || employee.username} outstanding={account.outstanding}
+          staffActive={Number(employee.is_active) === 1} canWaive={details.can_adjust} onDone={onChanged} />
+      </div>}
+    </section>
   );
 }
 

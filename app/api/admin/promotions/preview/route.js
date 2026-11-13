@@ -13,6 +13,10 @@ export async function POST(request) {
     const db = Database.getInstance()
     await ensurePromotionSchema(db)
     await ensureMenuVariantsSchema(db)
+    // Mirrors the pay route: a reopened bill gets no new auto-offer, only a coupon.
+    if (orderId && !body.coupon_code && await db.get("SELECT id FROM bills WHERE order_id = ? AND LOWER(COALESCE(status,'')) = 'reopened' LIMIT 1", [orderId])) {
+      return NextResponse.json({ promotion: null })
+    }
     const items = orderId
       ? await db.all(`SELECT oi.id AS order_item_id,
                COALESCE(oi.menu_item_id, oi.item_id) AS menu_item_id,

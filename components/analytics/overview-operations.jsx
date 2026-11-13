@@ -47,7 +47,8 @@ function CustomerCreditLedger({ range }) {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      const params = new URLSearchParams({ view: 'history' });
+      // export=1: the totals below add up these rows, so they need every page.
+      const params = new URLSearchParams({ view: 'history', export: '1' });
       if (from) params.set('from', from);
       if (to) params.set('to', to);
       if (query.trim()) params.set('search', query.trim());

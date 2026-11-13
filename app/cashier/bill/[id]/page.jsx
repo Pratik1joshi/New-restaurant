@@ -104,6 +104,12 @@ export default function BillDetailsPage({ params }) {
         setOrder(ws.order);
         setDeliveryFee(Math.max(0, Number(ws.order?.delivery_fee || 0)));
         setOrderItems(ws.items || []);
+        // A reopened bill settles only the difference, which is POS's job.
+        // This screen would charge the full total again, so hand it over.
+        if (String(ws.bill?.status || '').toLowerCase() === 'reopened') {
+          router.replace(`/cashier/pos?order=${resolvedParams.id}`);
+          return;
+        }
         setBillRow(ws.bill || null);
         setUnsentCount(ws.unsent_count || 0);
         if (ws.order?.customer_phone) {
@@ -407,8 +413,8 @@ export default function BillDetailsPage({ params }) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Could not reopen bill');
-      addToast(friendlyMessage('save_success', { description: 'Bill reopened — settle it again below.' }));
-      await fetchOrderDetails();
+      addToast(friendlyMessage('save_success', { description: 'Bill reopened — edit it in POS, then settle the difference.' }));
+      router.push(`/cashier/pos?order=${resolvedParams.id}`);
     } catch (e) {
       addToast(friendlyFromError(e, 'save_failed'));
     } finally {

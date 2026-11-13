@@ -22,6 +22,7 @@ import CustomerModePicker, {
 } from '@/components/billing/customer-mode-picker';
 import { emptySplitPayment } from '@/components/billing/split-payment-fields';
 import BillPaymentPanel from '@/components/pos/bill-payment-panel';
+import { normalizePaymentMethod } from '@/lib/payment-allocations.js';
 import { formatNepalDateTime } from '@/lib/report-dates.js';
 import {
   findPromotionForProduct,
@@ -913,10 +914,13 @@ export default function AdminPos() {
       notify('Send a KOT first — payment starts after the kitchen ticket.', 'warning');
       return;
     }
-    const due = workspace?.reopened
-      ? Math.max(0, Math.round((getTotals().total - Number(workspace?.already_paid || 0)) * 100) / 100)
+    const rawDue = workspace?.reopened
+      ? Math.round((getTotals().total - Number(workspace?.already_paid || 0)) * 100) / 100
       : getTotals().total;
-    setPaymentMethod('cash');
+    const due = Math.max(0, rawDue);
+    // A refund goes back the way the bill was paid when that was all online.
+    const paidOnline = (workspace?.payments || []).length > 0 && workspace.payments.every((p) => normalizePaymentMethod(p.method) === 'online');
+    setPaymentMethod(rawDue < -0.009 && paidOnline ? 'online' : 'cash');
     setAmountPaid(String(due || ''));
     setShowPayment(true);
   }, [getTotals, notify, orderId, workspace]);
@@ -1004,7 +1008,8 @@ export default function AdminPos() {
 
   const completeSale = useCallback(async () => {
     if (!orderId || busy) return;
-    if (!allLines.length) { notify('Add items to the cart first.', 'warning'); return; }
+    // An emptied reopened bill is a full refund, so it may settle with no lines.
+    if (!allLines.length && !workspace?.reopened) { notify('Add items to the cart first.', 'warning'); return; }
 
     const billTotals = getTotals();
     const paidAlready = workspace?.reopened ? Number(workspace?.already_paid || 0) : 0;
@@ -1856,7 +1861,7 @@ export default function AdminPos() {
               <button
                 type="button"
                 onClick={unsentLines.length ? sendKotAndOpenPayment : openPaymentPanel}
-                disabled={busy || !allLines.length || !orderId}
+                disabled={busy || (!allLines.length && !isReopened) || !orderId}
                 className={`py-2.5 text-white rounded-xl font-bold disabled:opacity-40 text-sm flex items-center justify-center gap-1.5 ${unsentLines.length ? 'bg-violet-600 hover:bg-violet-700' : 'bg-emerald-600 hover:bg-emerald-700'}`}
               >
                 {unsentLines.length ? <ChefHat className="w-4 h-4" /> : <CreditCard className="w-4 h-4" />}

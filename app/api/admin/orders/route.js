@@ -5,6 +5,7 @@ import { readListParams, resolveOrderBy, buildSearch, paginateQuery } from '@/li
 import { ensureOrderColumns } from '@/lib/online-orders.js';
 import { ensureColumn } from '@/lib/db/schema-helpers.js';
 import { ensurePromotionSchema } from '@/lib/promotions.js';
+import { ensureBillCorrectionsSchema } from '@/lib/bill-corrections.js';
 
 const ORDER_COLUMNS = `
   o.*,
@@ -81,6 +82,7 @@ export async function GET(request) {
     const db = Database.getInstance();
     await ensureOrderColumns(db);
     await ensurePromotionSchema(db);
+    await ensureBillCorrectionsSchema(db); // ORDER_FROM joins it; a fresh database has none yet.
     await ensureColumn(db, 'bills', 'payment_status', "TEXT DEFAULT 'unpaid'").catch(() => {});
     await ensureColumn(db, 'bills', 'outstanding_amount', 'REAL DEFAULT 0').catch(() => {});
 
@@ -122,6 +124,17 @@ export async function GET(request) {
       params.push(...searchClause.params);
     }
 
+    // Tab counts cover the search across every tab, so read them before the
+    // tab's own status filter narrows the set.
+    const statusCounts = searchParams.get('source') === 'online'
+      ? await db.all(`SELECT o.status AS status, COUNT(*) AS n FROM ${ORDER_FROM} WHERE ${conditions.join(' AND ')} GROUP BY o.status`, params)
+      : null;
+    const liveStatus = searchParams.get('order_status');
+    if (liveStatus) {
+      conditions.push('o.status = ?');
+      params.push(liveStatus);
+    }
+
     const where = conditions.join(' AND ');
 
     const { rows, pagination } = await paginateQuery(db, {
@@ -149,6 +162,7 @@ export async function GET(request) {
     return NextResponse.json({
       orders: rows,
       pagination,
+      ...(statusCounts ? { status_counts: Object.fromEntries(statusCounts.map((row) => [row.status, Number(row.n)])) } : {}),
       summary: {
         orders: Number(summary?.orders || 0),
         grossRevenue: Number(summary?.gross_revenue || 0),

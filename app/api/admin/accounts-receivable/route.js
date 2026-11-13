@@ -4,10 +4,10 @@ import { requireAuth, handleRouteError } from '@/lib/api-guard.js';
 import { ensureAccountingSchema } from '@/lib/accounting.js';
 import { listBankAccounts } from '@/lib/accounting-cash.js';
 import {
-  customerReceivables,
+  customerReceivablesPage,
   receivableAgeing,
   customerArStatement,
-  customerLedgerHistory,
+  customerLedgerHistoryPage,
   collectCustomerCredit,
   writeOffCustomerCredit,
   arAccountBalance,
@@ -16,6 +16,7 @@ import {
   correctCustomerCreditPaymentMethod,
 } from '@/lib/accounting-receivables.js';
 import { collectCreditBalance, writeOffCreditBalance } from '@/lib/split-payments.js';
+import { readListParams } from '@/lib/paginate.js';
 
 function newKey() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `k-${Date.now()}-${Math.random()}`;
@@ -30,10 +31,19 @@ export async function GET(request) {
     const q = new URL(request.url).searchParams;
 
     if (q.get('view') === 'history') {
-      const history = await customerLedgerHistory(db, {
-        from: q.get('from'), to: q.get('to'), status: q.get('status') || 'all', search: q.get('search'),
+      const { page, pageSize, exportAll, search } = readListParams(q);
+      const { rows, pagination, summary } = await customerLedgerHistoryPage(db, {
+        from: q.get('from'), to: q.get('to'), status: q.get('status') || 'all', search, page, pageSize, exportAll,
       });
-      return NextResponse.json({ history });
+      return NextResponse.json({ history: rows, pagination, summary });
+    }
+
+    if (q.get('view') === 'receivables') {
+      const { page, pageSize, exportAll, search } = readListParams(q);
+      const { rows, pagination, summary } = await customerReceivablesPage(db, {
+        from: q.get('from'), to: q.get('to'), search, page, pageSize, exportAll,
+      });
+      return NextResponse.json({ receivables: rows, pagination, summary });
     }
 
     // Itemised open credit bills for every customer (WhatsApp reminders).
@@ -50,13 +60,12 @@ export async function GET(request) {
       return NextResponse.json({ statement, bills });
     }
 
-    const [receivables, ageing, ar_balance, banks] = await Promise.all([
-      customerReceivables(db, { from: q.get('from'), to: q.get('to') }),
+    const [ageing, ar_balance, banks] = await Promise.all([
       receivableAgeing(db),
       arAccountBalance(db),
       listBankAccounts(db),
     ]);
-    return NextResponse.json({ receivables, ageing, ar_balance, banks });
+    return NextResponse.json({ ageing, ar_balance, banks });
   } catch (error) {
     return handleRouteError(error, 'Failed to load accounts receivable');
   }
@@ -80,6 +89,13 @@ export async function POST(request) {
     if (isCreditDiscount) {
       const discountAuth = await requireAuth(request, { permission: 'credit.writeoff' });
       if (discountAuth.error) return discountAuth.error;
+      // Waiving a staff member's food credit is an admin decision.
+      const owner = body.bill_id
+        ? await db.get('SELECT c.employee_id FROM bills b JOIN customers c ON c.id = b.customer_id WHERE b.id = ?', [body.bill_id]).catch(() => null)
+        : await db.get('SELECT employee_id FROM customers WHERE id = ?', [body.customer_id]).catch(() => null);
+      if (owner?.employee_id && actorRole !== 'admin') {
+        return NextResponse.json({ error: 'Only an administrator can waive staff food credit.' }, { status: 403 });
+      }
     }
     if (discountAmount > 0) {
       if (!String(body.discount_reason || '').trim()) {

@@ -14,6 +14,8 @@ import {
   recordAdvance,
   recordPayment,
 } from '@/lib/payroll.js';
+import { ensureStaffCustomerLinks, foodTakenInMonth, syncStaffCustomer } from '@/lib/staff-food-credit.js';
+import { openCreditBillsWithItems } from '@/lib/accounting-receivables.js';
 
 export async function GET(request) {
   try {
@@ -31,9 +33,13 @@ export async function GET(request) {
         listAdvances(db, employeeId),
         advanceOutstanding(db, employeeId),
       ]);
+      await syncStaffCustomer(db, employeeId).catch(() => null);
       const details = await monthlySalaryDetails(db, employeeId, params.get('month') || undefined);
-      return NextResponse.json({ payments, advances, outstanding, ...details, funding_available: fundingAvailable, can_adjust: auth.user.role === 'admin' });
+      // The bill list is a convenience; never fail the salary screen over it.
+      const foodBills = details.food_credit ? await openCreditBillsWithItems(db, details.food_credit.customer_id).catch(() => []) : [];
+      return NextResponse.json({ payments, advances, outstanding, ...details, food_bills: foodBills, funding_available: fundingAvailable, can_adjust: auth.user.role === 'admin' });
     }
+    await ensureStaffCustomerLinks(db);
     const [employees, advances, payments, terms, adjustments] = await Promise.all([
       listPayrollOverview(db),
       listAdvances(db),
@@ -42,11 +48,16 @@ export async function GET(request) {
       db.all('SELECT * FROM staff_salary_adjustments'),
     ]);
     const month = payrollMonth(params.get('month') || undefined);
+    const foodTaken = params.get('view') === 'sheet' ? await foodTakenInMonth(db, month) : new Map();
     const withBalances = employees.map((employee) => {
       const own = (rows) => rows.filter((row) => Number(row.employee_id) === Number(employee.id));
       const statement = calculateSalaryStatement({ month, terms: own(terms), adjustments: own(adjustments), advances: own(advances), payments: own(payments) });
-      return { ...employee, current_month_salary: statement.salary, remaining_salary: statement.remaining, carry_forward_deduction: statement.carry_forward_deduction };
+      const row = { ...employee, current_month_salary: statement.salary, remaining_salary: statement.remaining, carry_forward_deduction: statement.carry_forward_deduction };
+      if (params.get('view') !== 'sheet') return row;
+      const absentDays = own(adjustments).filter((a) => a.salary_month === month && a.kind === 'absence').reduce((n, a) => n + Number(a.absent_days || 0), 0);
+      return { ...row, statement, absent_days: absentDays, food_taken: foodTaken.get(Number(employee.id)) || 0 };
     });
+    if (params.get('view') === 'sheet') return NextResponse.json({ month, employees: withBalances });
     return NextResponse.json({ employees: withBalances, advances, payments });
   } catch (error) {
     return handleRouteError(error, 'Failed to load payroll');
